@@ -1,0 +1,5 @@
+# Never commit built executables or libraries.
+zig-out
+
+# Not intended to be shared.
+.zig-cache
