@@ -312,16 +312,136 @@ pub const Thumb = union(enum) {
     /// Format 13: add offset to Stack Pointer.
     ///
     /// "This instruction adds a 9-bit signed constant to the stack pointer."
+    /// ...
+    /// "The offset specified by #Imm can be up to -/+ 508, but must be word-aligned (ie with
+    /// bits 1:0 set to 0) since the assembler converts #Imm to an 8-bit sign + magnitude
+    /// number before placing it in field SWord7."
+    ///
+    /// In other words, the value written in assembly is divided by 4 when encoded.
     pub const AdjustSp = struct {
-        // The datasheet has a separate sign bit and a 7-bit value
-        // to be interpreted as signed or unsigned based on the sign bit.
-        //
-        // Seems like it makes more sense to just use an i8 here.
-        offset: i8,
+        op: enum(u1) {
+            add = 0,
+            sub = 1,
+        },
+        offset: u7,
 
         pub fn encode(self: AdjustSp) u16 {
             return 0xb000 |
-                @as(u16, @as(u8, @bitCast(self.offset)));
+                (@as(u16, @intFromEnum(self.op)) << 7) |
+                @as(u16, @as(u7, @bitCast(self.offset)));
+        }
+    };
+
+    /// Format 14: push/pop registers.
+    ///
+    /// "The instructions in this group allow registers 0-7
+    /// and optionally LR to be pushed onto the stack,
+    /// and registers 0-7 and optionally PC to be popped off the stack."
+    pub const Stack = struct {
+        l: enum(u1) {
+            store = 0,
+            load = 1,
+        },
+        r: enum(u1) {
+            no_store = 0,
+            store = 1,
+        },
+        rlist: u8,
+
+        pub fn encode(self: Stack) u16 {
+            return 0xb400 |
+                (@as(u16, @intFromEnum(self.l)) << 11) |
+                (@as(u16, @intFromEnum(self.r)) << 8) |
+                self.rlist;
+        }
+    };
+
+    /// Format 15: multiple load/store.
+    ///
+    /// "These instructions allow multiple loading and storing of Lo registers."
+    pub const MemMultiple = struct {
+        l: enum(u1) {
+            store = 0,
+            load = 1,
+        },
+        rb: u3,
+        rlist: u8,
+
+        pub fn encode(self: MemMultiple) u16 {
+            return 0xc000 |
+                (@as(u16, @intFromEnum(self.l)) << 11) |
+                (@as(u16, self.rb) << 8) |
+                self.rlist;
+        }
+    };
+
+    /// Format 16: conditional branch.
+    ///
+    /// "The instructions in this group all perform a conditional Branch
+    /// depending on the state of the CPSR condition codes."
+    pub const CondBranch = struct {
+        cond: enum(u4) {
+            eq = 0b0000,
+            ne = 0b0001,
+            cs = 0b0010,
+            cc = 0b0011,
+            mi = 0b0100,
+            pl = 0b0101,
+            vs = 0b0110,
+            vc = 0b0111,
+            hi = 0b1000,
+            ls = 0b1001,
+            ge = 0b1010,
+            lt = 0b1011,
+            gt = 0b1100,
+            le = 0b1101,
+
+            // Code 14 is "undefined, and should not be used",
+            // while code 15 indicates SWI.
+        },
+
+        // "The branch offset must take account of the prefetch operation,
+        // which causes the PCto be 1 word (4 bytes) ahead of the current instruction."
+        //
+        // "While label specifies a full 9-bit two’s complement address, this must always be
+        // halfword-aligned (ie with bit 0 set to 0) since the assembler actually places label >> 1
+        // in field SOffset8."
+        offset: i8,
+
+        pub fn encode(self: CondBranch) u16 {
+            return 0xd000 |
+                (@as(u16, @intFromEnum(self.cond)) << 8) |
+                (@as(u16, @as(u8, @bitCast(self.offset))));
+        }
+    };
+
+    /// Format 17: software interrupt.
+    ///
+    /// "The SWI instruction performs a software interrupt."
+    pub const SoftwareInterrupt = struct {
+        val: u8,
+
+        pub fn encode(self: SoftwareInterrupt) u16 {
+            return 0xdf00 |
+                @as(u16, self.val);
+        }
+    };
+
+    /// Format 18: unconditional branch.
+    ///
+    /// "This instruction performs a PC-relative Branch."
+    pub const Branch = struct {
+        // "The branch offset must take account of the prefetch operation, which
+        // causes the PC to be 1 word (4 bytes) ahead of the current instruction."
+        //
+        // "The address specified by label is a full 12-bit two’s complement address, but must
+        // always be halfword aligned (ie bit 0 set to 0), since the assembler places label >> 1 in
+        // the Offset11 field."
+        offset: i11,
+
+        pub fn encode(self: Branch) u16 {
+            return 0xe000 |
+                @as(u16, @as(u11, @bitCast(self.offset)));
         }
     };
 };
@@ -495,86 +615,95 @@ test "AdjustSp.encode" {
     // add sp, #0x18
     // (add sp, #imm)
     const op_add = Thumb.AdjustSp{
+        .op = .add,
         .offset = 0x18 >> 2,
     };
 
     try testing.expectEqual(0xb006, op_add.encode());
 
     // sub sp, #0x18
-    // (sub sp, #-imm)
+    // (sub sp, #imm)
     const op_sub = Thumb.AdjustSp{
-        .offset = -(0x18 >> 2),
+        .op = .sub,
+        .offset = 0x18 >> 2,
     };
 
     try testing.expectEqual(0xb086, op_sub.encode());
 }
 
-/// Format 14: push/pop registers.
-///
-/// "The instructions in this group allow registers 0-7
-/// and optionally LR to be pushed onto the stack,
-/// and registers 0-7 and optionally PC to be popped off the stack."
-pub const Stack = struct {
-    l: enum(u1) {
-        store = 0,
-        load = 1,
-    },
-    r: enum(u1) {
-        no_store = 0,
-        store = 1,
-    },
-    rlist: u8,
-};
+test "Stack.encode" {
+    // pop {r4, r5, r6, r7}
+    // (pop {rlist})
+    const op_pop = Thumb.Stack{
+        .l = .load,
+        .r = .no_store,
+        .rlist = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7),
+    };
 
-/// Format 15: multiple load/store.
-///
-/// "These instructions allow multiple loading and storing of Lo registers."
-pub const MemMultiple = struct {
-    l: enum(u1) {
-        store = 0,
-        load = 1,
-    },
-    rb: u3,
-    rlist: u8,
-};
+    try testing.expectEqual(0xbcf0, op_pop.encode());
 
-/// Format 16: conditional branch.
-///
-/// "The instructions in this group all perform a conditional Branch
-/// depending on the state of the CPSR condition codes."
-pub const CondBranch = struct {
-    cond: enum(u4) {
-        eq = 0,
-        ne = 1,
-        cs = 2,
-        cc = 3,
-        mi = 4,
-        pl = 5,
-        vs = 6,
-        vc = 7,
-        hi = 8,
-        ls = 9,
-        ge = 10,
-        lt = 11,
-        gt = 12,
-        le = 13,
-    },
-    offset: i8,
-};
+    // push {r4, lr}
+    // (push {rlist, lr})
+    const op_push_lr = Thumb.Stack{
+        .l = .store,
+        .r = .store,
+        .rlist = (1 << 4),
+    };
 
-/// Format 17: software interrupt.
-///
-/// "The SWI instruction performs a software interrupt."
-pub const SoftwareInterrupt = struct {
-    val: u8,
-};
+    try testing.expectEqual(0xb510, op_push_lr.encode());
+}
 
-/// Format 18: unconditional branch.
-///
-/// "This instruction performs a PC-relative Branch."
-pub const Branch = struct {
-    offset: i11,
-};
+test "MemMultiple.encode" {
+    // stmia r0!, {r3-r7}
+    // stmia rb!, {rlist}
+    const op = Thumb.MemMultiple{
+        .l = .store,
+        .rb = 0,
+        .rlist = (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7),
+    };
+    try testing.expectEqual(0xc0f8, op.encode());
+}
+
+test "CondBranch.encode" {
+    // "The branch offset must take account of the prefetch operation,
+    // which causes the PCto be 1 word (4 bytes) ahead of the current instruction."
+
+    // bhi +0x20
+    const op_forward = Thumb.CondBranch{
+        .cond = .hi,
+        .offset = (0x20 - 4) >> 1,
+    };
+    try testing.expectEqual(0xd80e, op_forward.encode());
+
+    // bge -0x16
+    const op_backward = Thumb.CondBranch{
+        .cond = .ge,
+        .offset = (-0x16 - 4) >> 1,
+    };
+    try testing.expectEqual(0xdaf3, op_backward.encode());
+}
+
+test "SoftwareInterrupt.encode" {
+    // swi 0xab
+    const op = Thumb.SoftwareInterrupt{
+        .val = 0xab,
+    };
+    try testing.expectEqual(0xdfab, op.encode());
+}
+
+test "Branch.encode" {
+    // b +0xac
+    const op_forward = Thumb.Branch{
+        .offset = (0xac - 4) >> 1,
+    };
+    try testing.expectEqual(0xe054, op_forward.encode());
+
+    // b -0x122
+    const op_backward = Thumb.Branch{
+        .offset = (-0x122 - 4) >> 1,
+    };
+    try testing.expectEqual(0xe76d, op_backward.encode());
+}
 
 /// Format 19: long branch with link.
 ///
