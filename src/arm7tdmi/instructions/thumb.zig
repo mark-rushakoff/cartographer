@@ -1,5 +1,3 @@
-const testing = @import("std").testing;
-
 // Reference: ARM7TDMI Data Sheet
 // (Look up ARM DDI 0029E, which appears to be labeled as "open access".)
 
@@ -102,22 +100,22 @@ pub const Thumb = union(enum) {
     /// "The following instructions perform ALU operations on a Lo register pair."
     pub const Alu = struct {
         op: enum(u4) {
-            and_ = 0,
-            eor = 1,
-            lsl = 2,
-            lsr = 3,
-            asr = 4,
-            adc = 5,
-            sbc = 6,
-            ror = 7,
-            tst = 8,
-            neg = 9,
-            cmp = 10,
-            cmn = 11,
-            orr = 12,
-            mul = 13,
-            bic = 14,
-            mvn = 15,
+            and_ = 0b0000,
+            eor = 0b0001,
+            lsl = 0b0010,
+            lsr = 0b0011,
+            asr = 0b0100,
+            adc = 0b0101,
+            sbc = 0b0110,
+            ror = 0b0111,
+            tst = 0b1000,
+            neg = 0b1001,
+            cmp = 0b1010,
+            cmn = 0b1011,
+            orr = 0b1100,
+            mul = 0b1101,
+            bic = 0b1110,
+            mvn = 0b1111,
         },
         rs: u3,
         rd: u3,
@@ -444,7 +442,32 @@ pub const Thumb = union(enum) {
                 @as(u16, @as(u11, @bitCast(self.offset)));
         }
     };
+
+    /// Format 19: long branch with link.
+    ///
+    /// "This format specifies a long branch with link."
+    pub const LongBranch = struct {
+        h: enum(u1) {
+            high = 0,
+            low = 1,
+        },
+
+        // The final offset in assembly ends up as a 23-bit integer,
+        // the least significant bit of which is 0,
+        // which is how it is encoded as 22-bits.
+        // Since we have to split it into two segments of 11 bits,
+        // we represent it as unsigned prior to reassemblign the full offset.
+        offset: u11,
+
+        pub fn encode(self: LongBranch) u16 {
+            return 0xf000 |
+                (@as(u16, @intFromEnum(self.h)) << 11) |
+                @as(u16, self.offset);
+        }
+    };
 };
+
+const testing = @import("std").testing;
 
 // All of the following tests are using instructions observed in the wild with a disassembler.
 
@@ -705,13 +728,17 @@ test "Branch.encode" {
     try testing.expectEqual(0xe76d, op_backward.encode());
 }
 
-/// Format 19: long branch with link.
-///
-/// "This format specifies a long branch with link."
-pub const LongBranch = struct {
-    h: enum(u1) {
-        high = 0,
-        low = 1,
-    },
-    offset: i11,
-};
+test "LongBranch.encode" {
+    // Upper bits first
+    const op_upper = Thumb.LongBranch{
+        .h = .high,
+        .offset = 0x7ca,
+    };
+    try testing.expectEqual(0xf7ca, op_upper.encode());
+
+    const op_lower = Thumb.LongBranch{
+        .h = .low,
+        .offset = 0xa3,
+    };
+    try testing.expectEqual(0xf8a3, op_lower.encode());
+}
