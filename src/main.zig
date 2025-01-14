@@ -1,10 +1,10 @@
 const std = @import("std");
 
-const thumb = @import("./arm7tdmi/instructions/thumb.zig").Thumb;
+const instr = @import("./arm7tdmi/instructions.zig");
 
 pub fn main() !void {
     // Totally arbitrary command that prints something in ascii.
-    const op = (thumb.RegOffset{
+    const op = (instr.Thumb.RegOffset{
         .l = .load,
         .b = .byte,
 
@@ -16,9 +16,10 @@ pub fn main() !void {
     const c1: u8 = @truncate(op >> 8);
     const c2: u8 = @truncate(op);
 
-    std.debug.print("Encode `ldrb r1, [r7, r1]`: {c}{c}\n", .{ c1, c2 });
+    std.debug.print("Encode THUMB: `ldrb r1, [r7, r1]`: {c}{c}\n", .{ c1, c2 });
 }
 
 test {
+    _ = instr.Arm; // Force reference for now.
     std.testing.refAllDecls(@This());
 }
