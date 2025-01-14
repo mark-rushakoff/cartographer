@@ -1,17 +1,24 @@
 const std = @import("std");
-const c = @cImport({
-    @cInclude("mgba/gba/core.h");
-});
+
+const thumb = @import("./arm7tdmi/instructions/thumb.zig").Thumb;
 
 pub fn main() !void {
-    std.debug.print("Testing mGBA bindings...\n", .{});
+    // Totally arbitrary command that prints something in ascii.
+    const op = (thumb.RegOffset{
+        .l = .load,
+        .b = .byte,
 
-    // I'm not yet sure if we will be using a GBA core or some other type,
-    // but this suffices for now to test that we've built the bindings correctly.
-    const core = c.GBACoreCreate();
-    if (core == null) {
-        return error.CoreCreateFailed;
-    }
+        .rd = 1,
+        .rb = 7,
+        .ro = 1,
+    }).encode();
 
-    std.debug.print("mGBA core initialized successfully\n", .{});
+    const c1: u8 = @truncate(op >> 8);
+    const c2: u8 = @truncate(op);
+
+    std.debug.print("Encode `ldrb r1, [r7, r1]`: {c}{c}\n", .{ c1, c2 });
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }

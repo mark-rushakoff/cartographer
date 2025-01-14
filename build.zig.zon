@@ -22,25 +22,7 @@
     // `zig build --fetch` can be used to fetch all dependencies of a package, recursively.
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
-    .dependencies = .{
-        .mgba = .{
-            .url = "https://github.com/mgba-emu/mgba/archive/0.10.4.tar.gz",
-            .hash = "12203b4448e3457a63cb5fa938a680574eb4edbe6622a0241e58ed226c53043601cc",
-        },
-
-        // While mgba vendors in some of its dependencies,
-        // blip_buf is external presumably due to it being an LGPL dependency.
-        // And the repository hosting blip_buf does not have any tags,
-        // hence the unusual download URL to ensure we get a fixed version.
-        //
-        // If this URL proves to be an issue,
-        // we can probably just vendor in blip_buf ourselves
-        // since Cartographer is GPL anyway.
-        .blip_buf = .{
-            .url = "https://api.github.com/repos/nesbox/blip-buf/zipball/330226d9b55ecbeea644e17b5e0f096a165ca07e",
-            .hash = "1220f932160c986cded8f873ac9611fc25f1f91e87fc5d59471585ac4f2aafd13f99",
-        },
-    },
+    .dependencies = .{},
     .paths = .{
         "build.zig",
         "build.zig.zon",
