@@ -3,7 +3,7 @@ const std = @import("std");
 const instr = @import("./arm7tdmi/instructions.zig");
 
 pub fn main() !void {
-    // Totally arbitrary command that prints something in ascii.
+    // Arbitrary opcode that happens to be valid ascii.
     const op = (instr.Thumb.RegOffset{
         .l = .load,
         .b = .byte,
@@ -21,5 +21,8 @@ pub fn main() !void {
 
 test {
     _ = instr.Arm; // Force reference for now.
-    std.testing.refAllDecls(@This());
+
+    _ = @import("./gba/timers.zig");
+
+    std.testing.refAllDeclsRecursive(@This());
 }

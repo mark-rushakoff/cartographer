@@ -18,6 +18,14 @@ fn configureTests(
         .target = target,
         .optimize = optimize,
     });
+
+    const ctest_module = b.createModule(.{
+        .root_source_file = .{ .cwd_relative = "src/ctest.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+    main_module.addImport("ctest", ctest_module);
+
     const tests = b.addTest(.{
         .root_module = main_module,
     });
