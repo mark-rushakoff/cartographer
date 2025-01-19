@@ -43,6 +43,54 @@ pub const Registers = struct {
     spsr_irq: u32 = 0,
     spsr_und: u32 = 0,
 
+    pub const initial = Registers{
+        .r0d = 0,
+        .r1d = 0,
+        .r2d = 0,
+        .r3d = 0,
+        .r4d = 0,
+        .r5d = 0,
+        .r6d = 0,
+        .r7d = 0,
+        .r8d = 0,
+        .r9d = 0,
+        .r10d = 0,
+        .r11d = 0,
+        .r12d = 0,
+
+        .r13d = 0,
+        .r14d = 0,
+        .r15d = 0,
+
+        .r8_fiqd = 0,
+        .r9_fiqd = 0,
+        .r10_fiqd = 0,
+        .r11_fiqd = 0,
+        .r12_fiqd = 0,
+        .r13_fiqd = 0,
+        .r14_fiqd = 0,
+
+        .r13_svcd = 0,
+        .r14_svcd = 0,
+
+        .r13_abtd = 0,
+        .r14_abtd = 0,
+
+        .r13_irqd = 0,
+        .r14_irqd = 0,
+
+        .r13_undd = 0,
+        .r14_undd = 0,
+
+        .cpsrd = 0,
+
+        .spsr_fiqd = 0,
+        .spsr_svcd = 0,
+        .spsr_abtd = 0,
+        .spsr_irqd = 0,
+        .spsr_undd = 0,
+    };
+
     /// InitValues defaults every register to zero.
     /// This is the argument to `init`.
     pub const InitValues = struct {

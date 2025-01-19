@@ -19,6 +19,13 @@ fn configureTests(
         .optimize = optimize,
     });
 
+    const arm_module = b.createModule(.{
+        .root_source_file = .{ .cwd_relative = "src/arm7tdmi/arm7tdmi.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+    main_module.addImport("arm", arm_module);
+
     const ctest_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/ctest.zig" },
         .target = target,
