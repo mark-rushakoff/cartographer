@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const instr = @import("./arm7tdmi/instructions.zig");
+const instr = @import("arm").instructions;
 
 pub fn main() !void {
     // Arbitrary opcode that happens to be valid ascii.
@@ -23,6 +23,7 @@ test {
     _ = instr.Arm; // Force reference for now.
 
     _ = @import("./gba/timers.zig");
+    _ = @import("./gba/core.zig").Core;
 
     std.testing.refAllDeclsRecursive(@This());
 }

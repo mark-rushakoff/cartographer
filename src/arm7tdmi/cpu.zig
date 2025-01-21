@@ -38,12 +38,10 @@ pub const Inst = union(enum) {
 // whether a tick is delegated to the CPU or prioritized to DMA.
 pub const Cpu = struct {
     status: WaitStatus,
-    registers: Registers,
 
     pub fn init() Cpu {
         return .{
             .status = .ready,
-            .registers = Registers.initial,
         };
     }
 
