@@ -20,8 +20,6 @@ pub fn main() !void {
 }
 
 test {
-    _ = instr.Arm; // Force reference for now.
-
     _ = @import("./gba/timers.zig");
     _ = @import("./gba/core.zig").Core;
 

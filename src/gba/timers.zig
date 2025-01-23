@@ -118,7 +118,7 @@ pub const Timers = struct {
 };
 
 const testing = @import("std").testing;
-const ctest = @import("../ctest.zig");
+const ctest = @import("ctest");
 
 test "Timer.running" {
     var ts = Timers.init();

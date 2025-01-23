@@ -15,3 +15,7 @@ pub const memory = @import("./memory.zig");
 pub const cpu = @import("./cpu.zig");
 
 pub const Cpu = cpu.Cpu;
+
+test {
+    @import("std").testing.refAllDeclsRecursive(@This());
+}

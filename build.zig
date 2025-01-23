@@ -32,14 +32,21 @@ fn configureTests(
         .optimize = optimize,
     });
     main_module.addImport("ctest", ctest_module);
+    arm_module.addImport("ctest", ctest_module);
 
-    const tests = b.addTest(.{
+    const main_tests = b.addTest(.{
         .root_module = main_module,
     });
-    const run_tests = b.addRunArtifact(tests);
+    const run_main_tests = b.addRunArtifact(main_tests);
+
+    const arm_tests = b.addTest(.{
+        .root_module = arm_module,
+    });
+    const run_arm_tests = b.addRunArtifact(arm_tests);
 
     const test_step = b.step("test", "Run all tests");
-    test_step.dependOn(&run_tests.step);
+    test_step.dependOn(&run_main_tests.step);
+    test_step.dependOn(&run_arm_tests.step);
 }
 
 fn configureCommand(

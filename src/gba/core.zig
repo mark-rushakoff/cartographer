@@ -26,15 +26,16 @@ pub const Core = struct {
 const testing = @import("std").testing;
 
 fn testingCore() Core {
+    const reg = arm.Registers.initial;
     return Core{
-        .registers = arm.Registers.initial,
+        .registers = reg,
 
         .cpu = arm.Cpu{
             // TODO: this might not be the appropriate starting status.
             .status = .ready,
         },
 
-        .pipeline = arm.Pipeline{},
+        .pipeline = arm.Pipeline.init(reg.state(), 0),
 
         .cycle_count = 0,
     };
