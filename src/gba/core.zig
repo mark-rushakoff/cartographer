@@ -16,8 +16,22 @@ pub const Core = struct {
     // so a u64 seems completely appropriate here.
     cycle_count: u64,
 
+    /// The tick method causes one full clock cycle
+    /// to be propagated to all the components within the core.
+    ///
+    /// As the Core type is the primary external-facing API,
+    /// we only expose a single tick method here.
+    /// However, the components within the Core have both
+    /// `tick_rising` and `tick_falling` methods.
+    /// This is intended to capture the subtle timing involved
+    /// within the processor clock, where different things happen
+    /// as part of the rising edge versus the falling edge of a clock cycle.
+    ///
+    /// Chapter 6 of the ARM7TDMI data sheet contains significant detail.
     pub fn tick(self: *Core) void {
-        // TODO: actually delegate ticks to components.
+        // TODO: delegate to more components.
+
+        self.pipeline.tick(self.registers.r15);
 
         self.cycle_count += 1;
     }
@@ -35,7 +49,7 @@ fn testingCore() Core {
             .status = .ready,
         },
 
-        .pipeline = arm.Pipeline.init(reg.state(), 0),
+        .pipeline = arm.Pipeline.init(reg.state(), reg.r15),
 
         .cycle_count = 0,
     };

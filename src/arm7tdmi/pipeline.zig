@@ -13,9 +13,12 @@ const DecodingValue = union(State) {
 };
 
 pub const PendingFetch = union(State) {
-    arm: PendingReadWord,
-    thumb: PendingReadHalf,
+    arm: PipelinePendingReadWord,
+    thumb: PipelinePendingReadHalf,
 };
+
+pub const PipelinePendingReadHalf = struct { addr: u32 };
+pub const PipelinePendingReadWord = struct { addr: u32 };
 
 pub const ReadyInstruction = union(State) {
     arm: instructions.Arm,
@@ -25,7 +28,7 @@ pub const ReadyInstruction = union(State) {
 pub const Pipeline = struct {
     /// Whether the pipeline is fetching 32-bit ARM
     /// or 16-bit THUMB instructions.
-    prev_state: State,
+    state: State,
 
     /// Outstanding fetch that has not yet completed.
     /// Depending on CPU state, could be a full word or half word fetch.
@@ -39,11 +42,15 @@ pub const Pipeline = struct {
     ready: ?ReadyInstruction,
 
     /// Program Counter.
+    /// Dubious whether we actually need this field,
+    /// as we currently store it in Pipeline
+    /// but also accept it as an argument to tick.
+    /// There should only be one value tracking pc, ideally.
     pc: u32,
 
     pub fn init(state: State, pc: u32) Pipeline {
         return .{
-            .prev_state = state,
+            .state = state,
 
             .pending_fetch = null,
             .decoding_value = null,
@@ -53,36 +60,39 @@ pub const Pipeline = struct {
         };
     }
 
-    pub fn tick(self: *Pipeline, state: State, pc: u32) void {
-        if (state != self.prev_state) {
-            // State changed, so we have to flush.
-            self.* = Pipeline.init(state, pc);
-        }
+    /// Flushing the pipeline is coordinated through the Core.
+    /// The CPU will signal when a branch is taken,
+    /// at which point the pipeline can be flushed and the new state can be noted.
+    pub fn flush(self: *Pipeline, state: State, pc: u32) void {
+        self.* = Pipeline.init(state, pc);
+    }
 
+    pub fn tick(self: *Pipeline, pc: u32) void {
         if (self.pending_fetch == null) {
-            self.pending_fetch = switch (state) {
+            self.pending_fetch = switch (self.state) {
                 .arm => .{
-                    .arm = PendingReadWord{
-                        .address = pc,
-                        .value = null,
-                    },
+                    .arm = PipelinePendingReadWord{ .addr = pc },
                 },
                 .thumb => .{
-                    .thumb = PendingReadHalf{
-                        .address = pc,
-                        .value = null,
-                    },
+                    .thumb = PipelinePendingReadHalf{ .addr = pc },
                 },
             };
         }
     }
 
-    pub fn completeFetch(self: *Pipeline, value: DecodingValue) void {
+    // Completing the fetch is coordinated through the Core.
+    // The return value is how much to increment pc.
+    pub fn completeFetch(self: *Pipeline, value: DecodingValue) u32 {
         if (self.pending_fetch == null) {
-            @panic("tried to complete a nil pending fetch");
+            @panic("tried to complete a null pending fetch");
         }
 
         _ = value;
+
+        return switch (self.state) {
+            .arm => 4,
+            .thumb => 2,
+        };
     }
 };
 
@@ -90,7 +100,8 @@ const testing = @import("std").testing;
 const ctest = @import("ctest");
 
 test "first cycle: thumb" {
-    var tp = Pipeline.init(.thumb, 0x8100_0000);
+    const pc: u32 = 0x8100_0000;
+    var tp = Pipeline.init(.thumb, pc);
 
     // Initializes with nil fields.
     try testing.expectEqual(null, tp.pending_fetch);
@@ -99,19 +110,19 @@ test "first cycle: thumb" {
 
     try ctest.expectEqualHex(0x8100_0000, tp.pc);
 
-    tp.tick(.thumb, 0x8100_0000);
+    tp.tick(pc);
 
     // Now the fetch is pending.
     try testing.expectEqual(tp.pending_fetch, PendingFetch{
-        .thumb = PendingReadHalf{
-            .address = 0x8100_0000,
-            .value = null,
-        },
+        .thumb = PipelinePendingReadHalf{ .addr = 0x8100_0000 },
     });
 
     // But nothing decoded or ready yet.
     try testing.expectEqual(null, tp.decoding_value);
     try testing.expectEqual(null, tp.ready);
+
+    // And the pc hasn't been modified.
+    try ctest.expectEqualHex(0x8100_0000, tp.pc);
 
     // TODO: continue expanding this test.
 }
