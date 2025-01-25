@@ -49,7 +49,7 @@ fn testingCore() Core {
             .status = .ready,
         },
 
-        .pipeline = arm.Pipeline.init(reg.state(), reg.r15),
+        .pipeline = arm.Pipeline.init(reg.state()),
 
         .cycle_count = 0,
     };
