@@ -1,5 +1,4 @@
 const State = @import("./registers.zig").Registers.State;
-const WaitStatus = @import("./cpu.zig").WaitStatus;
 
 const instructions = @import("./cpu.zig").instructions;
 
@@ -9,10 +8,14 @@ const PipelineDecodingValue = union(State) {
 };
 
 pub const PipelineFetchState = union(enum) {
+    /// Pending half-word read at the given address.
     pending_half: u32,
+    /// Pending full-word read at the given address.
     pending_word: u32,
 
-    completed_half: u32,
+    /// Completed half-word read with the given value.
+    completed_half: u16,
+    /// Completed full-word read with the given value.
     completed_word: u32,
 };
 
@@ -35,7 +38,7 @@ pub const Pipeline = struct {
     /// It needs to be decoded into an instruction.
     decoding_value: ?PipelineDecodingValue,
 
-    /// The instruction
+    /// The instruction to be executed by the CPU.
     ready: ?ReadyInstruction,
 
     pub fn init(state: State) Pipeline {
@@ -56,12 +59,67 @@ pub const Pipeline = struct {
     }
 
     pub fn tick(self: *Pipeline, pc: u32) void {
-        if (self.fetch_state == null) {
-            self.fetch_state = switch (self.state) {
-                .thumb => .{ .pending_half = pc },
-                .arm => .{ .pending_word = pc },
-            };
+        self.tick_decoding();
+        self.tick_fetch_state(pc);
+    }
+
+    // Handle the decoding value's reaction to a tick.
+    fn tick_decoding(self: *Pipeline) void {
+        if (self.decoding_value == null or self.ready != null) {
+            // We can't shift decoding,
+            // because we don't have a value or we don't have a place for it to go.
+            return;
         }
+
+        // Otherwise we do have a decoding value and ready is null,
+        // so we can decode and shift.
+        self.ready = .{
+            .thumb = instructions.Thumb.decode(self.decoding_value.?.thumb),
+        };
+        self.decoding_value = null;
+    }
+
+    /// Handle the fetch_state field's reaction to a tick.
+    fn tick_fetch_state(self: *Pipeline, pc: u32) void {
+        if (self.fetch_state) |fs| {
+            if (self.decoding_value != null) {
+                // Whether the fetch is completed or pending,
+                // we can't shift it if we still have a populated decoding value.
+                return;
+            }
+
+            switch (fs) {
+                // Decoding value is null, so we can populate it
+                // if we have a completed fetch.
+                .completed_half => {
+                    self.decoding_value = .{ .thumb = fs.completed_half };
+                    self.begin_fetch(pc);
+                },
+                .completed_word => {
+                    self.decoding_value = .{ .arm = fs.completed_word };
+                    self.begin_fetch(pc);
+                },
+
+                // Otherwise the fetch was still pending so we can't do anything.
+                else => {},
+            }
+
+            return;
+        }
+
+        // Otherwise fetch state was null;
+        // this should only happen in initial state or after a flush.
+        self.begin_fetch(pc);
+    }
+
+    /// Begin a fetch for the instruction at pc.
+    /// This happens in initial state, after a flush,
+    /// or following a completed fetch that shifts to decoding.
+    fn begin_fetch(self: *Pipeline, pc: u32) void {
+        self.fetch_state = switch (self.state) {
+            .thumb => .{ .pending_half = pc },
+            .arm => .{ .pending_word = pc },
+        };
     }
 
     // Completing the fetch is coordinated through the Core.
@@ -74,12 +132,7 @@ pub const Pipeline = struct {
             @panic("tried to complete a half-word fetch while in arm mode");
         }
 
-        if (self.decoding_value == null) {
-            self.decoding_value = .{ .thumb = opcode };
-            self.fetch_state = null;
-        } else {
-            self.fetch_state = .{ .completed_half = opcode };
-        }
+        self.fetch_state = .{ .completed_half = opcode };
 
         pc.* += 2;
     }
@@ -94,12 +147,7 @@ pub const Pipeline = struct {
             @panic("tried to complete a full-word fetch while in thumb mode");
         }
 
-        if (self.decoding_value == null) {
-            self.decoding_value = .{ .arm = opcode };
-            self.fetch_state = null;
-        } else {
-            self.fetch_state = .{ .completed_word = opcode };
-        }
+        self.fetch_state = .{ .completed_word = opcode };
 
         pc.* += 4;
     }
@@ -108,7 +156,7 @@ pub const Pipeline = struct {
 const testing = @import("std").testing;
 const ctest = @import("ctest");
 
-test "first cycle: thumb" {
+test "from flush, thumb state" {
     var p = Pipeline.init(.thumb);
 
     // Initializes with nil fields.
@@ -128,18 +176,56 @@ test "first cycle: thumb" {
     try testing.expectEqual(null, p.decoding_value);
     try testing.expectEqual(null, p.ready);
 
-    // Now the core completes the fetch.
-    p.completeFetchHalf(0x1234, &pc);
+    // And if we tick again -- as would happen with memory in wait state --
+    // nothing changes.
+    p.tick(pc);
 
-    // That means the fetch state is null again, we are decoding that op,
-    // and the ready slot is also still null.
-    try testing.expectEqual(null, p.fetch_state);
-    try testing.expectEqual(0x1234, p.decoding_value.?.thumb);
+    try testing.expectEqual(PipelineFetchState{
+        .pending_half = pc,
+    }, p.fetch_state);
+
+    // But nothing decoded or ready yet.
+    try testing.expectEqual(null, p.decoding_value);
     try testing.expectEqual(null, p.ready);
 
-    // And the pc is increased by 2 bytes for THUMB.
+    // Now the core completes the fetch.
+    // This would happen at the end of a tick, before the next tick starts.
+    const inst = instructions.Thumb.Immediate{
+        .op = .mov,
+        .rd = 0,
+        .val = 123,
+    };
+    const op = inst.encode();
+    p.completeFetchHalf(op, &pc);
+
+    // Now the fetch state has changed from pending to complete.
+    // Still nothing decoding or ready.
+    try testing.expectEqual(PipelineFetchState{
+        .completed_half = op,
+    }, p.fetch_state);
+    try testing.expectEqual(null, p.decoding_value);
+    try testing.expectEqual(null, p.ready);
+
+    // On the next tick, we begin a new fetch
+    // while the old fetch is moved to decoding.
+    p.tick(pc);
+    try testing.expectEqual(PipelineFetchState{
+        .pending_half = pc,
+    }, p.fetch_state);
+    try testing.expectEqual(op, p.decoding_value.?.thumb);
+    try testing.expectEqual(null, p.ready);
+
+    // And the pc was increased by 2 bytes for THUMB.
     try ctest.expectEqualHex(0x8100_0002, pc);
 
-    // TODO: one more tick to see a new pending fetch
-    // and shift from decoding to ready.
+    // Now we do another tick.
+    // The fetch hasn't completed so that is still pending.
+    // But we had a decoding value,
+    // so now decoding shifts out to ready.
+    p.tick(pc);
+    try testing.expectEqual(PipelineFetchState{
+        .pending_half = pc,
+    }, p.fetch_state);
+    try testing.expectEqual(null, p.decoding_value);
+    try testing.expectEqual(inst, p.ready.?.thumb.immediate);
 }

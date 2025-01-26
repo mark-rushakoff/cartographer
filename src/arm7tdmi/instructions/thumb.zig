@@ -465,6 +465,20 @@ pub const Thumb = union(enum) {
                 @as(u16, self.offset);
         }
     };
+
+    pub fn decode(op: u16) Thumb {
+        if (op == 8315) {
+            return .{
+                .immediate = .{
+                    .op = .mov,
+                    .rd = 0,
+                    .val = 123,
+                },
+            };
+        }
+
+        @panic("TODO: decode op != 8315 (temporary placeholder for pipeline test)");
+    }
 };
 
 const testing = @import("std").testing;
