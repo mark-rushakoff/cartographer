@@ -1,5 +1,6 @@
 const Thumb = @import("./thumb.zig").Thumb;
 const testing = @import("std").testing;
+const ctest = @import("ctest");
 
 // All of the following tests are using instructions observed in the wild with a disassembler.
 
@@ -12,8 +13,9 @@ test "MoveShifted.encode" {
         .rd = 0,
     };
 
-    try testing.expectEqual(0x0088, op.encode());
-    try testing.expectEqual(op, Thumb.decode(0x0088).move_shifted);
+    const code = 0x0088;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).move_shifted);
 }
 
 test "AddSubtract.encode" {
@@ -27,7 +29,9 @@ test "AddSubtract.encode" {
         .rd = 0,
     };
 
-    try testing.expectEqual(0x1930, op.encode());
+    const code = 0x1930;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).add_subtract);
 }
 
 test "Immediate.encode" {
@@ -38,7 +42,9 @@ test "Immediate.encode" {
         .val = 1,
     };
 
-    try testing.expectEqual(0x2601, op.encode());
+    const code = 0x2601;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).immediate);
 }
 
 test "Alu.encode" {
@@ -50,7 +56,9 @@ test "Alu.encode" {
         .rs = 0,
     };
 
-    try testing.expectEqual(0x4286, op.encode());
+    const code = 0x4286;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).alu);
 }
 
 test "HiRegister.encode" {
@@ -64,7 +72,9 @@ test "HiRegister.encode" {
         .rs = 2,
     };
 
-    try testing.expectEqual(0x4657, op.encode());
+    const code = 0x4657;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).hi_register);
 }
 
 test "PcLoad.encode" {
@@ -77,7 +87,9 @@ test "PcLoad.encode" {
         .val = 0xb0 >> 2,
     };
 
-    try testing.expectEqual(0x4d2c, op.encode());
+    const code = 0x4d2c;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).pc_load);
 }
 
 test "RegOffset.encode" {
@@ -91,7 +103,9 @@ test "RegOffset.encode" {
         .rd = 3,
     };
 
-    try testing.expectEqual(0x5193, op.encode());
+    const code = 0x5193;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).reg_offset);
 }
 
 test "MemSign.encode" {
@@ -105,7 +119,9 @@ test "MemSign.encode" {
         .rd = 0,
     };
 
-    try testing.expectEqual(0x5668, op.encode());
+    const code = 0x5668;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).mem_sign);
 }
 
 test "MemOffset.encode" {
@@ -121,7 +137,9 @@ test "MemOffset.encode" {
         .rd = 1,
     };
 
-    try testing.expectEqual(0x60c1, op.encode());
+    const code = 0x60c1;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).mem_offset);
 }
 
 test "MemHalfword.encode" {
@@ -136,7 +154,9 @@ test "MemHalfword.encode" {
         .rd = 1,
     };
 
-    try testing.expectEqual(0x88e1, op.encode());
+    const code = 0x88e1;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).mem_halfword);
 }
 
 test "AccessSp.encode" {
@@ -150,7 +170,9 @@ test "AccessSp.encode" {
         .val = 8 >> 2,
     };
 
-    try testing.expectEqual(0x9102, op.encode());
+    const code = 0x9102;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).access_sp);
 }
 
 test "Load.encode" {
@@ -164,7 +186,9 @@ test "Load.encode" {
         .val = 0xc >> 2,
     };
 
-    try testing.expectEqual(0xad03, op.encode());
+    const code = 0xad03;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).load);
 }
 
 test "AdjustSp.encode" {
@@ -175,7 +199,9 @@ test "AdjustSp.encode" {
         .offset = 0x18 >> 2,
     };
 
-    try testing.expectEqual(0xb006, op_add.encode());
+    const code_add = 0xb006;
+    try ctest.expectEqualHex(code_add, op_add.encode());
+    try testing.expectEqual(op_add, Thumb.decode(code_add).adjust_sp);
 
     // sub sp, #0x18
     // (sub sp, #imm)
@@ -184,7 +210,9 @@ test "AdjustSp.encode" {
         .offset = 0x18 >> 2,
     };
 
-    try testing.expectEqual(0xb086, op_sub.encode());
+    const code_sub = 0xb086;
+    try ctest.expectEqualHex(code_sub, op_sub.encode());
+    try testing.expectEqual(op_sub, Thumb.decode(code_sub).adjust_sp);
 }
 
 test "Stack.encode" {
@@ -196,7 +224,9 @@ test "Stack.encode" {
         .rlist = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7),
     };
 
-    try testing.expectEqual(0xbcf0, op_pop.encode());
+    const code_pop = 0xbcf0;
+    try ctest.expectEqualHex(code_pop, op_pop.encode());
+    try testing.expectEqual(op_pop, Thumb.decode(code_pop).stack);
 
     // push {r4, lr}
     // (push {rlist, lr})
@@ -206,7 +236,9 @@ test "Stack.encode" {
         .rlist = (1 << 4),
     };
 
-    try testing.expectEqual(0xb510, op_push_lr.encode());
+    const code_push = 0xb510;
+    try ctest.expectEqualHex(code_push, op_push_lr.encode());
+    try testing.expectEqual(op_push_lr, Thumb.decode(code_push).stack);
 }
 
 test "MemMultiple.encode" {
@@ -217,7 +249,10 @@ test "MemMultiple.encode" {
         .rb = 0,
         .rlist = (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7),
     };
-    try testing.expectEqual(0xc0f8, op.encode());
+
+    const code = 0xc0f8;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).mem_multiple);
 }
 
 test "CondBranch.encode" {
@@ -229,14 +264,18 @@ test "CondBranch.encode" {
         .cond = .hi,
         .offset = (0x20 - 4) >> 1,
     };
-    try testing.expectEqual(0xd80e, op_forward.encode());
+    const code_forward = 0xd80e;
+    try ctest.expectEqualHex(code_forward, op_forward.encode());
+    try testing.expectEqual(op_forward, Thumb.decode(code_forward).cond_branch);
 
     // bge -0x16
     const op_backward = Thumb.CondBranch{
         .cond = .ge,
         .offset = (-0x16 - 4) >> 1,
     };
-    try testing.expectEqual(0xdaf3, op_backward.encode());
+    const code_backward = 0xdaf3;
+    try ctest.expectEqualHex(code_backward, op_backward.encode());
+    try testing.expectEqual(op_backward, Thumb.decode(code_backward).cond_branch);
 }
 
 test "SoftwareInterrupt.encode" {
@@ -244,7 +283,10 @@ test "SoftwareInterrupt.encode" {
     const op = Thumb.SoftwareInterrupt{
         .val = 0xab,
     };
-    try testing.expectEqual(0xdfab, op.encode());
+
+    const code = 0xdfab;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Thumb.decode(code).software_interrupt);
 }
 
 test "Branch.encode" {
@@ -252,13 +294,17 @@ test "Branch.encode" {
     const op_forward = Thumb.Branch{
         .offset = (0xac - 4) >> 1,
     };
-    try testing.expectEqual(0xe054, op_forward.encode());
+    const code_forward = 0xe054;
+    try ctest.expectEqualHex(code_forward, op_forward.encode());
+    try testing.expectEqual(op_forward, Thumb.decode(code_forward).branch);
 
     // b -0x122
     const op_backward = Thumb.Branch{
         .offset = (-0x122 - 4) >> 1,
     };
-    try testing.expectEqual(0xe76d, op_backward.encode());
+    const code_backward = 0xe76d;
+    try ctest.expectEqualHex(code_backward, op_backward.encode());
+    try testing.expectEqual(op_backward, Thumb.decode(code_backward).branch);
 }
 
 test "LongBranch.encode" {
@@ -267,11 +313,15 @@ test "LongBranch.encode" {
         .h = .high,
         .offset = 0x7ca,
     };
-    try testing.expectEqual(0xf7ca, op_upper.encode());
+    const code_upper = 0xf7ca;
+    try ctest.expectEqualHex(code_upper, op_upper.encode());
+    try testing.expectEqual(op_upper, Thumb.decode(code_upper).long_branch);
 
     const op_lower = Thumb.LongBranch{
         .h = .low,
         .offset = 0xa3,
     };
-    try testing.expectEqual(0xf8a3, op_lower.encode());
+    const code_lower = 0xf8a3;
+    try ctest.expectEqualHex(code_lower, op_lower.encode());
+    try testing.expectEqual(op_lower, Thumb.decode(code_lower).long_branch);
 }

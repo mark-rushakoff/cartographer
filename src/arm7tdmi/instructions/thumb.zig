@@ -44,6 +44,17 @@ pub const Thumb = union(enum) {
                 (@as(u16, self.rs) << 3) |
                 @as(u16, self.rd);
         }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .move_shifted = .{
+                    .op = @enumFromInt((op >> 11) & 3),
+                    .offset = @truncate((op >> 6) & 0x1f),
+                    .rs = @truncate((op >> 3) & 3),
+                    .rd = @truncate(op & 3),
+                },
+            };
+        }
     };
 
     /// Format 2: add/subtract.
@@ -71,6 +82,18 @@ pub const Thumb = union(enum) {
                 (@as(u16, self.rs) << 3) |
                 @as(u16, self.rd);
         }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .add_subtract = .{
+                    .imm = @enumFromInt((op >> 10) & 1),
+                    .op = @enumFromInt((op >> 9) & 1),
+                    .val = @truncate((op >> 6) & 7),
+                    .rs = @truncate((op >> 3) & 7),
+                    .rd = @truncate(op & 7),
+                },
+            };
+        }
     };
 
     /// Format 3: move/compare/add/subtract immediate.
@@ -92,6 +115,16 @@ pub const Thumb = union(enum) {
                 (@as(u16, @intFromEnum(self.op)) << 11) |
                 (@as(u16, self.rd) << 8) |
                 @as(u16, self.val);
+        }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .immediate = .{
+                    .op = @enumFromInt((op >> 11) & 3),
+                    .rd = @truncate((op >> 8) & 7),
+                    .val = @truncate(op & 0xff),
+                },
+            };
         }
     };
 
@@ -126,6 +159,16 @@ pub const Thumb = union(enum) {
                 (@as(u16, self.rs) << 3) |
                 @as(u16, self.rd);
         }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .alu = .{
+                    .op = @enumFromInt((op >> 6) & 0xf),
+                    .rs = @truncate((op >> 3) & 7),
+                    .rd = @truncate(op & 7),
+                },
+            };
+        }
     };
 
     /// Format 5: Hi register operations/branch exchange.
@@ -154,6 +197,18 @@ pub const Thumb = union(enum) {
                 (@as(u16, self.rs) << 3) |
                 @as(u16, self.rd);
         }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .hi_register = .{
+                    .op = @enumFromInt((op >> 8) & 3),
+                    .h1 = @truncate((op >> 7) & 1),
+                    .h2 = @truncate((op >> 6) & 1),
+                    .rs = @truncate((op >> 3) & 7),
+                    .rd = @truncate(op & 7),
+                },
+            };
+        }
     };
 
     /// Format 6: PC-relative load.
@@ -168,6 +223,15 @@ pub const Thumb = union(enum) {
             return 0x4800 |
                 (@as(u16, self.rd) << 8) |
                 @as(u16, self.val);
+        }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .pc_load = .{
+                    .rd = @truncate((op >> 8) & 7),
+                    .val = @truncate(op & 0xff),
+                },
+            };
         }
     };
 
@@ -196,6 +260,18 @@ pub const Thumb = union(enum) {
                 (@as(u16, self.rb) << 3) |
                 @as(u16, self.rd);
         }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .reg_offset = .{
+                    .l = @enumFromInt((op >> 11) & 1),
+                    .b = @enumFromInt((op >> 10) & 1),
+                    .ro = @truncate((op >> 6) & 7),
+                    .rb = @truncate((op >> 3) & 7),
+                    .rd = @truncate(op & 7),
+                },
+            };
+        }
     };
 
     /// Format 8: load/store sign-extended byte/halfword.
@@ -216,6 +292,18 @@ pub const Thumb = union(enum) {
                 (@as(u16, self.ro) << 6) |
                 (@as(u16, self.rb) << 3) |
                 @as(u16, self.rd);
+        }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .mem_sign = .{
+                    .h = @truncate((op >> 11) & 1),
+                    .s = @truncate((op >> 10) & 1),
+                    .ro = @truncate((op >> 6) & 7),
+                    .rb = @truncate((op >> 3) & 7),
+                    .rd = @truncate(op & 7),
+                },
+            };
         }
     };
 
@@ -244,6 +332,18 @@ pub const Thumb = union(enum) {
                 (@as(u16, self.rb) << 3) |
                 @as(u16, self.rd);
         }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .mem_offset = .{
+                    .b = @enumFromInt((op >> 12) & 1),
+                    .l = @enumFromInt((op >> 11) & 1),
+                    .offset = @truncate((op >> 6) & 0x1f),
+                    .rb = @truncate((op >> 3) & 7),
+                    .rd = @truncate(op & 7),
+                },
+            };
+        }
     };
 
     /// Format 10: load/store halfword.
@@ -266,6 +366,17 @@ pub const Thumb = union(enum) {
                 (@as(u16, self.rb) << 3) |
                 @as(u16, self.rd);
         }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .mem_halfword = .{
+                    .l = @enumFromInt((op >> 11) & 1),
+                    .offset = @truncate((op >> 6) & 0x1f),
+                    .rb = @truncate((op >> 3) & 7),
+                    .rd = @truncate(op & 7),
+                },
+            };
+        }
     };
 
     /// Format 11: SP-relative load/store.
@@ -284,6 +395,16 @@ pub const Thumb = union(enum) {
                 (@as(u16, @intFromEnum(self.l)) << 11) |
                 (@as(u16, self.rd) << 8) |
                 @as(u16, self.val);
+        }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .access_sp = .{
+                    .l = @enumFromInt((op >> 11) & 1),
+                    .rd = @truncate((op >> 8) & 7),
+                    .val = @truncate(op & 0xff),
+                },
+            };
         }
     };
 
@@ -304,6 +425,16 @@ pub const Thumb = union(enum) {
                 (@as(u16, @intFromEnum(self.src)) << 11) |
                 (@as(u16, self.rd) << 8) |
                 @as(u16, self.val);
+        }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .load = .{
+                    .src = @enumFromInt((op >> 11) & 1),
+                    .rd = @truncate((op >> 8) & 7),
+                    .val = @truncate(op & 0xff),
+                },
+            };
         }
     };
 
@@ -327,6 +458,15 @@ pub const Thumb = union(enum) {
             return 0xb000 |
                 (@as(u16, @intFromEnum(self.op)) << 7) |
                 @as(u16, @as(u7, @bitCast(self.offset)));
+        }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .adjust_sp = .{
+                    .op = @enumFromInt((op >> 7) & 1),
+                    .offset = @truncate(op & 0x7f),
+                },
+            };
         }
     };
 
@@ -352,6 +492,16 @@ pub const Thumb = union(enum) {
                 (@as(u16, @intFromEnum(self.r)) << 8) |
                 self.rlist;
         }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .stack = .{
+                    .l = @enumFromInt((op >> 11) & 1),
+                    .r = @enumFromInt((op >> 8) & 1),
+                    .rlist = @truncate(op & 0xff),
+                },
+            };
+        }
     };
 
     /// Format 15: multiple load/store.
@@ -370,6 +520,16 @@ pub const Thumb = union(enum) {
                 (@as(u16, @intFromEnum(self.l)) << 11) |
                 (@as(u16, self.rb) << 8) |
                 self.rlist;
+        }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .mem_multiple = .{
+                    .l = @enumFromInt((op >> 11) & 1),
+                    .rb = @truncate((op >> 8) & 7),
+                    .rlist = @truncate(op & 0xff),
+                },
+            };
         }
     };
 
@@ -411,6 +571,16 @@ pub const Thumb = union(enum) {
                 (@as(u16, @intFromEnum(self.cond)) << 8) |
                 (@as(u16, @as(u8, @bitCast(self.offset))));
         }
+
+        fn decode(op: u16) Thumb {
+            // TODO: handle .cond == 14 as illegal?
+            return .{
+                .cond_branch = .{
+                    .cond = @enumFromInt((op >> 8) & 0xf),
+                    .offset = @as(i8, @bitCast(@as(u8, @truncate(op & 0xff)))),
+                },
+            };
+        }
     };
 
     /// Format 17: software interrupt.
@@ -422,6 +592,14 @@ pub const Thumb = union(enum) {
         pub fn encode(self: SoftwareInterrupt) u16 {
             return 0xdf00 |
                 @as(u16, self.val);
+        }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .software_interrupt = .{
+                    .val = @truncate(op & 0xff),
+                },
+            };
         }
     };
 
@@ -440,6 +618,14 @@ pub const Thumb = union(enum) {
         pub fn encode(self: Branch) u16 {
             return 0xe000 |
                 @as(u16, @as(u11, @bitCast(self.offset)));
+        }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .branch = .{
+                    .offset = @as(i11, @bitCast(@as(u11, @truncate(op & 0x7ff)))),
+                },
+            };
         }
     };
 
@@ -464,37 +650,64 @@ pub const Thumb = union(enum) {
                 (@as(u16, @intFromEnum(self.h)) << 11) |
                 @as(u16, self.offset);
         }
+
+        fn decode(op: u16) Thumb {
+            return .{
+                .long_branch = .{
+                    .h = @enumFromInt((op >> 11) & 1),
+                    .offset = @truncate(op & 0x7ff),
+                },
+            };
+        }
     };
 
     pub fn decode(op: u16) Thumb {
         switch (op) {
-            0x0000...0x1fff => return decodeMoveShifted(op),
-            else => {}, // TODO
-        }
+            0x0000...0x17ff => return Thumb.MoveShifted.decode(op),
+            0x1800...0x1fff => return Thumb.AddSubtract.decode(op),
+            0x2000...0x3fff => return Thumb.Immediate.decode(op),
+            0x4000...0x43ff => return Thumb.Alu.decode(op),
+            0x4400...0x47ff => return Thumb.HiRegister.decode(op),
+            0x4800...0x4fff => return Thumb.PcLoad.decode(op),
 
-        // Temporary shim for pipeline test.
-        if (op == 8315) {
-            return .{
-                .immediate = .{
-                    .op = .mov,
-                    .rd = 0,
-                    .val = 123,
-                },
-            };
-        }
+            // A weird pairing with a toggled bit in the middle.
+            0x5000...0x5fff => return decodeRegOffsetOrMemSign(op),
 
-        @panic("TODO: decode op != 8315 (temporary placeholder for pipeline test)");
+            0x6000...0x7fff => return Thumb.MemOffset.decode(op),
+            0x8000...0x8fff => return Thumb.MemHalfword.decode(op),
+            0x9000...0x9fff => return Thumb.AccessSp.decode(op),
+            0xa000...0xafff => return Thumb.Load.decode(op),
+            0xb000...0xb0ff => return Thumb.AdjustSp.decode(op),
+
+            // Stack is weird due to a fixed bits at 9 and 10 but variable bit at 11.
+            0xb100...0xbfff => return decodeStackOrIllegal(op),
+
+            0xc000...0xcfff => return Thumb.MemMultiple.decode(op),
+            0xd000...0xdeff => return Thumb.CondBranch.decode(op),
+            0xdf00...0xdfff => return Thumb.SoftwareInterrupt.decode(op),
+            0xe000...0xe7ff => return Thumb.Branch.decode(op),
+
+            // Need to revisit the data sheet to see what is supposed to happen here.
+            0xe800...0xefff => @panic("TODO: how to handle this range?"),
+
+            0xf000...0xffff => return Thumb.LongBranch.decode(op),
+        }
     }
 
-    fn decodeMoveShifted(op: u16) Thumb {
-        return .{
-            .move_shifted = .{
-                .op = @enumFromInt((op >> 11) & 3),
-                .offset = @truncate((op >> 6) & 0x1f),
-                .rs = @truncate((op >> 3) & 3),
-                .rd = @truncate(op & 3),
-            },
-        };
+    fn decodeRegOffsetOrMemSign(op: u16) Thumb {
+        if ((op & (1 << 9)) == 0) {
+            return RegOffset.decode(op);
+        }
+
+        return MemSign.decode(op);
+    }
+
+    fn decodeStackOrIllegal(op: u16) Thumb {
+        if (((op >> 9) & 3) != 0b10) {
+            @panic("TODO: handle illegal instruction (we don't have an enum for that yet)");
+        }
+
+        return Stack.decode(op);
     }
 };
 
