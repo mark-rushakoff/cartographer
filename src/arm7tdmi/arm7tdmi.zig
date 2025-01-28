@@ -8,7 +8,7 @@ pub const instructions = struct {
 
 pub const Registers = @import("./registers.zig").Registers;
 
-pub const Pipeline = @import("./pipeline.zig").Pipeline;
+pub const Pipeline = @import("./pipeline.zig");
 
 pub const memory = @import("./memory.zig");
 
