@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const instr = @import("arm").instructions;
+const instr = @import("arm7tdmi").instructions;
 
 pub fn main() !void {
     // Arbitrary opcode that happens to be valid ascii.

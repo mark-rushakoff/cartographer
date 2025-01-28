@@ -24,7 +24,7 @@ fn configureTests(
         .target = target,
         .optimize = optimize,
     });
-    main_module.addImport("arm", arm_module);
+    main_module.addImport("arm7tdmi", arm_module);
 
     const ctest_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/ctest.zig" },

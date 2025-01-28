@@ -1,4 +1,4 @@
-const arm = @import("arm");
+const arm = @import("arm7tdmi");
 
 /// Core contains all the hardware of a GBA.
 pub const Core = struct {
