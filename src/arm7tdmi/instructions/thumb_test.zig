@@ -241,6 +241,14 @@ test "Stack.encode" {
     try testing.expectEqual(op_push_lr, Thumb.decode(code_push).stack);
 }
 
+test "undefined range within Stack opcodes" {
+    const op_set_bit_9_l0 = 0xb600;
+    const op_set_bit_9_l1 = 0xbe00;
+
+    try ctest.expectEqualHex(op_set_bit_9_l0, Thumb.decode(op_set_bit_9_l0).undef.op);
+    try ctest.expectEqualHex(op_set_bit_9_l1, Thumb.decode(op_set_bit_9_l1).undef.op);
+}
+
 test "MemMultiple.encode" {
     // stmia r0!, {r3-r7}
     // stmia rb!, {rlist}
@@ -276,6 +284,11 @@ test "CondBranch.encode" {
     const code_backward = 0xdaf3;
     try ctest.expectEqualHex(code_backward, op_backward.encode());
     try testing.expectEqual(op_backward, Thumb.decode(code_backward).cond_branch);
+
+    // cond=14, causing an undefined instruction.
+
+    const code_undef = 0xde12;
+    try testing.expectEqual(Thumb.Undefined{ .op = code_undef }, Thumb.decode(code_undef).undef);
 }
 
 test "SoftwareInterrupt.encode" {
@@ -305,6 +318,11 @@ test "Branch.encode" {
     const code_backward = 0xe76d;
     try ctest.expectEqualHex(code_backward, op_backward.encode());
     try testing.expectEqual(op_backward, Thumb.decode(code_backward).branch);
+}
+
+test "undefined range from 0xe800 to 0xefff" {
+    const code = 0xe987;
+    try testing.expectEqual(Thumb.Undefined{ .op = code }, Thumb.decode(code).undef);
 }
 
 test "LongBranch.encode" {

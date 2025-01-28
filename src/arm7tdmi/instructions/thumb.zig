@@ -24,6 +24,9 @@ pub const Thumb = union(enum) {
     branch: Branch,
     long_branch: LongBranch,
 
+    // Illegal opcodes.
+    undef: Undefined,
+
     /// Format 1: move shifted register.
     ///
     /// "These instructions move a shifted value between Lo registers."
@@ -555,7 +558,8 @@ pub const Thumb = union(enum) {
             le = 0b1101,
 
             // Code 14 is "undefined, and should not be used",
-            // while code 15 indicates SWI.
+            // and we return an Undefined instruction for that during decode.
+            // Code 15 indicates SWI.
         },
 
         // "The branch offset must take account of the prefetch operation,
@@ -573,10 +577,17 @@ pub const Thumb = union(enum) {
         }
 
         fn decode(op: u16) Thumb {
-            // TODO: handle .cond == 14 as illegal?
+            const cond: u4 = @truncate((op >> 8) & 0xf);
+            if (cond == 14) {
+                // Undefined per the cond enum.
+                return .{
+                    .undef = .{ .op = op },
+                };
+            }
+
             return .{
                 .cond_branch = .{
-                    .cond = @enumFromInt((op >> 8) & 0xf),
+                    .cond = @enumFromInt(cond),
                     .offset = @as(i8, @bitCast(@as(u8, @truncate(op & 0xff)))),
                 },
             };
@@ -661,6 +672,10 @@ pub const Thumb = union(enum) {
         }
     };
 
+    pub const Undefined = struct {
+        op: u32,
+    };
+
     pub fn decode(op: u16) Thumb {
         switch (op) {
             0x0000...0x17ff => return Thumb.MoveShifted.decode(op),
@@ -680,15 +695,18 @@ pub const Thumb = union(enum) {
             0xb000...0xb0ff => return Thumb.AdjustSp.decode(op),
 
             // Stack is weird due to a fixed bits at 9 and 10 but variable bit at 11.
-            0xb100...0xbfff => return decodeStackOrIllegal(op),
+            0xb100...0xbfff => return decodeStackOrUndefined(op),
 
             0xc000...0xcfff => return Thumb.MemMultiple.decode(op),
             0xd000...0xdeff => return Thumb.CondBranch.decode(op),
             0xdf00...0xdfff => return Thumb.SoftwareInterrupt.decode(op),
             0xe000...0xe7ff => return Thumb.Branch.decode(op),
 
-            // Need to revisit the data sheet to see what is supposed to happen here.
-            0xe800...0xefff => @panic("TODO: how to handle this range?"),
+            // This section is absent from the THUMB instruction set
+            // portion of the data sheet.
+            0xe800...0xefff => return .{
+                .undef = .{ .op = op },
+            },
 
             0xf000...0xffff => return Thumb.LongBranch.decode(op),
         }
@@ -702,9 +720,11 @@ pub const Thumb = union(enum) {
         return MemSign.decode(op);
     }
 
-    fn decodeStackOrIllegal(op: u16) Thumb {
+    fn decodeStackOrUndefined(op: u16) Thumb {
         if (((op >> 9) & 3) != 0b10) {
-            @panic("TODO: handle illegal instruction (we don't have an enum for that yet)");
+            return .{
+                .undef = .{ .op = op },
+            };
         }
 
         return Stack.decode(op);
