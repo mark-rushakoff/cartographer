@@ -2,6 +2,7 @@ const State = @import("./registers.zig").Registers.State;
 
 const instructions = @import("./cpu.zig").instructions;
 
+/// The fetch-decode-execute pipeline of the ARM7TDMI.
 const Pipeline = @This();
 
 /// Whether the pipeline is fetching 32-bit ARM

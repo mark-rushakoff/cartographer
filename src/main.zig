@@ -21,7 +21,7 @@ pub fn main() !void {
 
 test {
     _ = @import("./gba/timers.zig");
-    _ = @import("./gba/core.zig").Core;
+    _ = @import("./gba/Core.zig");
 
     std.testing.refAllDeclsRecursive(@This());
 }
