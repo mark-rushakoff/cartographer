@@ -72,13 +72,13 @@ fn completeOperation(self: *MemoryManager) Completion {
 
                 .read_half => return .{
                     .pipeline = .{
-                        .read_half = self.readHalfImmediate(self.pending_pipeline.?.read_half),
+                        .read_half = self.readHalfImmediate(self.pending_pipeline.?.read_half, .pipeline),
                     },
                 },
 
                 .read_word => return .{
                     .pipeline = .{
-                        .read_word = self.readWordImmediate(self.pending_pipeline.?.read_word),
+                        .read_word = self.readWordImmediate(self.pending_pipeline.?.read_word, .pipeline),
                     },
                 },
             }
@@ -185,14 +185,14 @@ fn getRegion(self: *MemoryManager, addr: u32) MemoryRegion {
     };
 }
 
-fn readHalfImmediate(self: *MemoryManager, addr: u32) u16 {
+fn readHalfImmediate(self: *MemoryManager, addr: u32, requester: MemoryRegion.ReadRequester) u16 {
     const reg = self.getRegion(addr);
-    return reg.readHalf(addr).value;
+    return reg.readHalf(.{ .addr = addr, .requester = requester }).value;
 }
 
-fn readWordImmediate(self: *MemoryManager, addr: u32) u32 {
+fn readWordImmediate(self: *MemoryManager, addr: u32, requester: MemoryRegion.ReadRequester) u32 {
     const reg = self.getRegion(addr);
-    return reg.readWord(addr).value;
+    return reg.readWord(.{ .addr = addr, .requester = requester }).value;
 }
 
 /// Type of active_operation field.

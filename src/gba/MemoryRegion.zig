@@ -7,39 +7,37 @@ const MemoryRegion = @This();
 ctx: *anyopaque,
 
 vtab: struct {
-    readByte: *const fn (ctx: *anyopaque, addr: u32) ReadResult(u8),
-    readHalf: *const fn (ctx: *anyopaque, addr: u32) ReadResult(u16),
-    readWord: *const fn (ctx: *anyopaque, addr: u32) ReadResult(u32),
+    readByte: *const fn (ctx: *anyopaque, req: ReadRequest) ReadResult(u8),
+    readHalf: *const fn (ctx: *anyopaque, req: ReadRequest) ReadResult(u16),
+    readWord: *const fn (ctx: *anyopaque, req: ReadRequest) ReadResult(u32),
 
-    writeByte: *const fn (ctx: *anyopaque, addr: u32, val: u8) WriteResult(u8),
-    writeHalf: *const fn (ctx: *anyopaque, addr: u32, val: u16) WriteResult(u16),
-    writeWord: *const fn (ctx: *anyopaque, addr: u32, val: u32) WriteResult(u32),
+    writeByte: *const fn (ctx: *anyopaque, req: WriteRequest(u8)) WriteResult(u8),
+    writeHalf: *const fn (ctx: *anyopaque, req: WriteRequest(u16)) WriteResult(u16),
+    writeWord: *const fn (ctx: *anyopaque, req: WriteRequest(u32)) WriteResult(u32),
 },
 
-// TODO: extract ReadRequest and WriteRequest types.
-
-pub fn readByte(self: MemoryRegion, addr: u32) ReadResult(u8) {
-    return self.vtab.readByte(self.ctx, addr);
+pub fn readByte(self: MemoryRegion, req: ReadRequest) ReadResult(u8) {
+    return self.vtab.readByte(self.ctx, req);
 }
 
-pub fn readHalf(self: MemoryRegion, addr: u32) ReadResult(u16) {
-    return self.vtab.readHalf(self.ctx, addr);
+pub fn readHalf(self: MemoryRegion, req: ReadRequest) ReadResult(u16) {
+    return self.vtab.readHalf(self.ctx, req);
 }
 
-pub fn readWord(self: MemoryRegion, addr: u32) ReadResult(u32) {
-    return self.vtab.readWord(self.ctx, addr);
+pub fn readWord(self: MemoryRegion, req: ReadRequest) ReadResult(u32) {
+    return self.vtab.readWord(self.ctx, req);
 }
 
-pub fn writeByte(self: MemoryRegion, addr: u32, val: u8) WriteResult(u8) {
-    return self.vtab.writeByte(self.ctx, addr, val);
+pub fn writeByte(self: MemoryRegion, req: WriteRequest(u8)) WriteResult(u8) {
+    return self.vtab.writeByte(self.ctx, req);
 }
 
-pub fn writeHalf(self: MemoryRegion, addr: u32, val: u16) WriteResult(u16) {
-    return self.vtab.writeHalf(self.ctx, addr, val);
+pub fn writeHalf(self: MemoryRegion, req: WriteRequest(u16)) WriteResult(u16) {
+    return self.vtab.writeHalf(self.ctx, req);
 }
 
-pub fn writeWord(self: MemoryRegion, addr: u32, val: u32) WriteResult(u32) {
-    return self.vtab.writeWord(self.ctx, addr, val);
+pub fn writeWord(self: MemoryRegion, req: WriteRequest(u32)) WriteResult(u32) {
+    return self.vtab.writeWord(self.ctx, req);
 }
 
 pub fn init(region: anytype) MemoryRegion {
@@ -52,34 +50,34 @@ pub fn init(region: anytype) MemoryRegion {
     assert(@typeInfo(PtrInfo.pointer.child) == .@"struct");
 
     const impl = struct {
-        fn readByte(ctx: *anyopaque, addr: u32) ReadResult(u8) {
+        fn readByte(ctx: *anyopaque, req: ReadRequest) ReadResult(u8) {
             const self: Ptr = @ptrCast(@alignCast(ctx));
-            return self.readByte(addr);
+            return self.readByte(req);
         }
 
-        fn readHalf(ctx: *anyopaque, addr: u32) ReadResult(u16) {
+        fn readHalf(ctx: *anyopaque, req: ReadRequest) ReadResult(u16) {
             const self: Ptr = @ptrCast(@alignCast(ctx));
-            return self.readHalf(addr);
+            return self.readHalf(req);
         }
 
-        fn readWord(ctx: *anyopaque, addr: u32) ReadResult(u32) {
+        fn readWord(ctx: *anyopaque, req: ReadRequest) ReadResult(u32) {
             const self: Ptr = @ptrCast(@alignCast(ctx));
-            return self.readWord(addr);
+            return self.readWord(req);
         }
 
-        fn writeByte(ctx: *anyopaque, addr: u32, val: u8) WriteResult(u8) {
+        fn writeByte(ctx: *anyopaque, req: WriteRequest(u8)) WriteResult(u8) {
             const self: Ptr = @ptrCast(@alignCast(ctx));
-            return self.writeByte(addr, val);
+            return self.writeByte(req);
         }
 
-        fn writeHalf(ctx: *anyopaque, addr: u32, val: u16) WriteResult(u16) {
+        fn writeHalf(ctx: *anyopaque, req: WriteRequest(u16)) WriteResult(u16) {
             const self: Ptr = @ptrCast(@alignCast(ctx));
-            return self.writeHalf(addr, val);
+            return self.writeHalf(req);
         }
 
-        fn writeWord(ctx: *anyopaque, addr: u32, val: u32) WriteResult(u32) {
+        fn writeWord(ctx: *anyopaque, req: WriteRequest(u32)) WriteResult(u32) {
             const self: Ptr = @ptrCast(@alignCast(ctx));
-            return self.writeWord(addr, val);
+            return self.writeWord(req);
         }
     };
 
@@ -97,6 +95,24 @@ pub fn init(region: anytype) MemoryRegion {
     };
 }
 
+/// ReadRequester indicates what component is requesting a read.
+/// This is useful for debugging,
+/// and for some regions it may influence behavior.
+/// For example, the BIOS region only allows the pipeline to read its memory.
+pub const ReadRequester = enum {
+    pipeline,
+    cpu,
+
+    // TODO: DMA
+};
+
+/// A memory read request originating from a particular component.
+pub const ReadRequest = struct {
+    addr: u32,
+
+    requester: ReadRequester,
+};
+
 /// The result of a read operation on a MemoryRegion.
 pub fn ReadResult(comptime T: type) type {
     return struct {
@@ -109,6 +125,26 @@ pub fn ReadResult(comptime T: type) type {
         /// different from what is stored at that address,
         /// for example in the case of attempted reads from BIOS.
         value: T,
+    };
+}
+
+/// WriteRequester indicates what component is requesting a write.
+/// This is useful for debugging,
+/// and for some regions it may influence behavior.
+pub const WriteRequester = enum {
+    cpu,
+
+    // TODO: DMA
+};
+
+/// A request to write a memory value at a particular address,
+/// including the value to write and who is requesting the write.
+pub fn WriteRequest(comptime T: type) type {
+    return struct {
+        addr: u32,
+        value: T,
+
+        requester: WriteRequester,
     };
 }
 

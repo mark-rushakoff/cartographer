@@ -1,4 +1,8 @@
 const MemoryRegion = @import("../../MemoryRegion.zig");
+const ReadRequest = MemoryRegion.ReadRequest;
+const ReadResult = MemoryRegion.ReadResult;
+const WriteRequest = MemoryRegion.WriteRequest;
+const WriteResult = MemoryRegion.WriteResult;
 
 const std = @import("std");
 
@@ -10,75 +14,75 @@ pub fn Buffer(comptime sz: u32, base_addr: u32) type {
 
         pub const Self = @This();
 
-        pub fn readByte(self: *Self, addr: u32) MemoryRegion.ReadResult(u8) {
-            const offset = addr - base_addr;
+        pub fn readByte(self: *Self, req: ReadRequest) ReadResult(u8) {
+            const offset = req.addr - base_addr;
 
             return .{
-                .addr = addr,
+                .addr = req.addr,
                 .value = self.data[offset],
             };
         }
 
-        pub fn readHalf(self: *Self, addr: u32) MemoryRegion.ReadResult(u16) {
-            const offset = addr - base_addr;
+        pub fn readHalf(self: *Self, req: ReadRequest) ReadResult(u16) {
+            const offset = req.addr - base_addr;
             const bytes = self.data[offset .. offset + 2];
 
             return .{
-                .addr = addr,
+                .addr = req.addr,
                 .value = std.mem.readInt(u16, bytes[0..2], .little),
             };
         }
 
-        pub fn readWord(self: *Self, addr: u32) MemoryRegion.ReadResult(u32) {
-            const offset = addr - base_addr;
+        pub fn readWord(self: *Self, req: ReadRequest) ReadResult(u32) {
+            const offset = req.addr - base_addr;
             const bytes = self.data[offset .. offset + 4];
 
             return .{
-                .addr = addr,
+                .addr = req.addr,
                 .value = std.mem.readInt(u32, bytes[0..4], .little),
             };
         }
 
-        pub fn writeByte(self: *Self, addr: u32, val: u8) MemoryRegion.WriteResult(u8) {
-            const offset = addr - base_addr;
+        pub fn writeByte(self: *Self, req: WriteRequest(u8)) WriteResult(u8) {
+            const offset = req.addr - base_addr;
 
             const old_val = self.data[offset];
-            self.data[offset] = val;
+            self.data[offset] = req.value;
 
             return .{
-                .addr = addr,
+                .addr = req.addr,
                 .old_value = old_val,
-                .new_value = val,
+                .new_value = req.value,
             };
         }
 
-        pub fn writeHalf(self: *Self, addr: u32, val: u16) MemoryRegion.WriteResult(u16) {
-            const offset = addr - base_addr;
+        pub fn writeHalf(self: *Self, req: WriteRequest(u16)) WriteResult(u16) {
+            const offset = req.addr - base_addr;
 
             const bytes = self.data[offset .. offset + 2];
             const old_val = std.mem.readInt(u16, bytes[0..2], .little);
 
-            std.mem.writeInt(u16, bytes[0..2], val, .little);
+            std.mem.writeInt(u16, bytes[0..2], req.value, .little);
 
             return .{
-                .addr = addr,
+                .addr = req.addr,
                 .old_value = old_val,
-                .new_value = val,
+                .new_value = req.value,
             };
         }
 
-        pub fn writeWord(self: *Self, addr: u32, val: u32) MemoryRegion.WriteResult(u32) {
-            const offset = addr - base_addr;
+        pub fn writeWord(self: *Self, req: WriteRequest(u32)) WriteResult(u32) {
+            const offset = req.addr - base_addr;
 
             const bytes = self.data[offset .. offset + 4];
             const old_val = std.mem.readInt(u32, bytes[0..4], .little);
 
-            std.mem.writeInt(u32, bytes[0..4], val, .little);
+            std.mem.writeInt(u32, bytes[0..4], req.value, .little);
 
             return .{
-                .addr = addr,
+                .addr = req.addr,
                 .old_value = old_val,
-                .new_value = val,
+                .new_value = req.value,
             };
         }
     };
@@ -97,28 +101,46 @@ test "basic behavior" {
     const mr = MemoryRegion.init(&r);
 
     // Reads.
-    try testing.expectEqual(MemoryRegion.ReadResult(u8){ .addr = 3, .value = 0x40 }, mr.readByte(3));
-    try testing.expectEqual(MemoryRegion.ReadResult(u16){ .addr = 2, .value = 0x4030 }, mr.readHalf(2));
-    try testing.expectEqual(MemoryRegion.ReadResult(u32){ .addr = 4, .value = 0x80706050 }, mr.readWord(4));
+    try testing.expectEqual(
+        ReadResult(u8){ .addr = 3, .value = 0x40 },
+        mr.readByte(.{ .addr = 3, .requester = .pipeline }),
+    );
+    try testing.expectEqual(
+        ReadResult(u16){ .addr = 2, .value = 0x4030 },
+        mr.readHalf(.{ .addr = 2, .requester = .pipeline }),
+    );
+    try testing.expectEqual(
+        ReadResult(u32){ .addr = 4, .value = 0x80706050 },
+        mr.readWord(.{ .addr = 4, .requester = .pipeline }),
+    );
 
     // Writes with reads.
     try testing.expectEqual(
-        MemoryRegion.WriteResult(u8){ .addr = 1, .old_value = 0x20, .new_value = 0x21 },
-        mr.writeByte(1, 0x21),
+        WriteResult(u8){ .addr = 1, .old_value = 0x20, .new_value = 0x21 },
+        mr.writeByte(.{ .addr = 1, .value = 0x21, .requester = .cpu }),
     );
-    try testing.expectEqual(MemoryRegion.ReadResult(u8){ .addr = 1, .value = 0x21 }, mr.readByte(1));
+    try testing.expectEqual(
+        ReadResult(u8){ .addr = 1, .value = 0x21 },
+        mr.readByte(.{ .addr = 1, .requester = .cpu }),
+    );
 
     try testing.expectEqual(
-        MemoryRegion.WriteResult(u16){ .addr = 2, .old_value = 0x4030, .new_value = 0xabcd },
-        mr.writeHalf(2, 0xabcd),
+        WriteResult(u16){ .addr = 2, .old_value = 0x4030, .new_value = 0xabcd },
+        mr.writeHalf(.{ .addr = 2, .value = 0xabcd, .requester = .cpu }),
     );
-    try testing.expectEqual(MemoryRegion.ReadResult(u16){ .addr = 2, .value = 0xabcd }, mr.readHalf(2));
+    try testing.expectEqual(
+        ReadResult(u16){ .addr = 2, .value = 0xabcd },
+        mr.readHalf(.{ .addr = 2, .requester = .cpu }),
+    );
 
     try testing.expectEqual(
-        MemoryRegion.WriteResult(u32){ .addr = 4, .old_value = 0x80706050, .new_value = 0x01234567 },
-        mr.writeWord(4, 0x01234567),
+        WriteResult(u32){ .addr = 4, .old_value = 0x80706050, .new_value = 0x01234567 },
+        mr.writeWord(.{ .addr = 4, .value = 0x01234567, .requester = .cpu }),
     );
-    try testing.expectEqual(MemoryRegion.ReadResult(u32){ .addr = 4, .value = 0x01234567 }, mr.readWord(4));
+    try testing.expectEqual(
+        ReadResult(u32){ .addr = 4, .value = 0x01234567 },
+        mr.readWord(.{ .addr = 4, .requester = .cpu }),
+    );
 
     // And after all that, the data is laid out as expected.
     try testing.expect(
@@ -142,6 +164,6 @@ test "non-zero base address" {
     const addr = 0x0100_0006;
     try testing.expectEqual(
         MemoryRegion.ReadResult(u8){ .addr = addr, .value = 0x70 },
-        mr.readByte(addr),
+        mr.readByte(.{ .addr = addr, .requester = .pipeline }),
     );
 }
