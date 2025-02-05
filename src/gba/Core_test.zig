@@ -1,28 +1,39 @@
 const arm = @import("arm7tdmi");
 const Core = @import("./Core.zig");
 const MemoryManager = @import("./MemoryManager.zig");
+const MemoryRegion = @import("./MemoryRegion.zig");
+const Region8 = @import("./MemoryRegion_test.zig").Region8;
 const testing = @import("std").testing;
 
-fn testingCore() Core {
-    const reg = arm.Registers.initial;
+fn testingCore(memory_manager: MemoryManager) !Core {
+    const registers = arm.Registers.initial;
+
     return Core{
-        .registers = reg,
+        .registers = registers,
 
         .cpu = arm.Cpu{
             // TODO: this might not be the appropriate starting status.
             .status = .ready,
         },
 
-        .pipeline = arm.Pipeline.init(reg.state()),
+        .pipeline = arm.Pipeline.init(registers.state()),
 
-        .memory_manager = MemoryManager.initial,
+        .memory_manager = memory_manager,
 
         .cycle_count = 0,
     };
 }
 
 test "tick increases cycle count by 1" {
-    var core = testingCore();
+    var bios_impl = Region8{
+        .data = .{0} ** 8,
+    };
+    var mm = MemoryManager.initial;
+    mm.regions = .{
+        .bios = MemoryRegion.init(&bios_impl),
+    };
+
+    var core = try testingCore(mm);
 
     try testing.expectEqual(0, core.cycle_count);
     core.tick();
@@ -30,7 +41,15 @@ test "tick increases cycle count by 1" {
 }
 
 test "initial tick sets memory manager state" {
-    var core = testingCore();
+    var bios_impl = Region8{
+        .data = .{0} ** 8,
+    };
+    var mm = MemoryManager.initial;
+    mm.regions = .{
+        .bios = MemoryRegion.init(&bios_impl),
+    };
+
+    var core = try testingCore(mm);
 
     // Before first tick:
     // Memory manager is idle.

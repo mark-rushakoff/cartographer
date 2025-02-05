@@ -1,7 +1,3 @@
-const result = @import("./result.zig");
-const ReadResult = result.ReadResult;
-const WriteResult = result.WriteResult;
-
 pub const sys_start: u32 = 0;
 pub const sys_end: u32 = ew_ram_start - 1;
 
@@ -25,20 +21,3 @@ pub const oam_end: u32 = game_pak_start - 1;
 
 pub const game_pak_start: u32 = 0x08000000;
 pub const game_pak_end: u32 = 0xffffffff;
-
-/// Null is a region that can be used in tests
-/// where the region of memory is expected to not be accessed.
-pub const Null = struct {
-    pub fn readByte(self: Null, addr: u32) !ReadResult(u8) {
-        _ = self;
-        _ = addr;
-        unreachable;
-    }
-
-    pub fn writeByte(self: Null, addr: u32, val: u8) !WriteResult {
-        _ = self;
-        _ = addr;
-        _ = val;
-        unreachable;
-    }
-};
