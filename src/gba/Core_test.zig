@@ -2,7 +2,7 @@ const arm = @import("arm7tdmi");
 const Core = @import("./Core.zig");
 const MemoryManager = @import("./MemoryManager.zig");
 const MemoryRegion = @import("./MemoryRegion.zig");
-const Region8 = @import("./MemoryRegion_test.zig").Region8;
+const BufferRegion = @import("./memory/regions/Buffer.zig").Buffer;
 const testing = @import("std").testing;
 
 fn testingCore(memory_manager: MemoryManager) !Core {
@@ -25,7 +25,7 @@ fn testingCore(memory_manager: MemoryManager) !Core {
 }
 
 test "tick increases cycle count by 1" {
-    var bios_impl = Region8{
+    var bios_impl = BufferRegion(8, 0){
         .data = .{0} ** 8,
     };
     var mm = MemoryManager.initial;
@@ -41,7 +41,7 @@ test "tick increases cycle count by 1" {
 }
 
 test "initial tick sets memory manager state" {
-    var bios_impl = Region8{
+    var bios_impl = BufferRegion(8, 0){
         .data = .{0} ** 8,
     };
     var mm = MemoryManager.initial;

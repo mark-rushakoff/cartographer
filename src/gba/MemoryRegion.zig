@@ -130,7 +130,3 @@ pub fn WriteResult(comptime T: type) type {
         new_value: T,
     };
 }
-
-test {
-    _ = @import("./MemoryRegion_test.zig");
-}

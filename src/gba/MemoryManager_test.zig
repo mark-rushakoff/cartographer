@@ -1,6 +1,6 @@
 const MemoryManager = @import("./MemoryManager.zig");
 const MemoryRegion = @import("./MemoryRegion.zig");
-const Region8 = @import("./MemoryRegion_test.zig").Region8; // TODO: might be better in a different location.
+const BufferRegion = @import("./memory/regions/Buffer.zig").Buffer;
 const testing = @import("std").testing;
 
 test "setPipelineOperation sets active operation to pipeline" {
@@ -67,9 +67,11 @@ test "tick with no active operation returns null" {
     try testing.expectEqual(null, mm.tick());
 }
 
+const Buf8 = BufferRegion(8, 0);
+
 test "ticking an active pipeline half read returns a completion, on BIOS region with wait=1" {
     var mm = MemoryManager.initial;
-    var biosRegion = Region8{
+    var biosRegion = Buf8{
         .data = .{ 0xab, 0x12 } ++ (.{0} ** 6),
     };
     const bios = MemoryRegion.init(&biosRegion);
@@ -91,7 +93,7 @@ test "ticking an active pipeline half read returns a completion, on BIOS region 
 
 test "ticking an active pipeline word read returns a completion, on BIOS region with wait=1" {
     var mm = MemoryManager.initial;
-    var biosRegion = Region8{
+    var biosRegion = Buf8{
         .data = .{ 0xcd, 0xab, 0x34, 0x12 } ++ (.{0} ** 4),
     };
     const bios = MemoryRegion.init(&biosRegion);
