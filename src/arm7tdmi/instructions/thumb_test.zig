@@ -4,7 +4,7 @@ const ctest = @import("ctest");
 
 // All of the following tests are using instructions observed in the wild with a disassembler.
 
-test "MoveShifted.encode" {
+test "MoveShifted encode/decode" {
     // Logical shift left, r1, by 2, storing in r0.
     const op = Thumb.MoveShifted{
         .op = .lsl,
@@ -18,7 +18,7 @@ test "MoveShifted.encode" {
     try testing.expectEqual(op, Thumb.decode(code).move_shifted);
 }
 
-test "AddSubtract.encode" {
+test "AddSubtract encode/decode" {
     // add r0, r6, r4
     // (add rd, rs, rn)
     const op = Thumb.AddSubtract{
@@ -34,7 +34,7 @@ test "AddSubtract.encode" {
     try testing.expectEqual(op, Thumb.decode(code).add_subtract);
 }
 
-test "Immediate.encode" {
+test "Immediate encode/decode" {
     // mov r6, #1
     const op = Thumb.Immediate{
         .op = .mov,
@@ -47,7 +47,7 @@ test "Immediate.encode" {
     try testing.expectEqual(op, Thumb.decode(code).immediate);
 }
 
-test "Alu.encode" {
+test "Alu encode/decode" {
     // cmp r6, r0
     // (cmp rd, rs)
     const op = Thumb.Alu{
@@ -61,7 +61,7 @@ test "Alu.encode" {
     try testing.expectEqual(op, Thumb.decode(code).alu);
 }
 
-test "HiRegister.encode" {
+test "HiRegister encode/decode" {
     // mov r7, r10
     // (mov rd, hs)
     const op = Thumb.HiRegister{
@@ -77,7 +77,7 @@ test "HiRegister.encode" {
     try testing.expectEqual(op, Thumb.decode(code).hi_register);
 }
 
-test "PcLoad.encode" {
+test "PcLoad encode/decode" {
     // ldr r5, [pc, #0xb0]
     // (ldr rd, [pc, #imm])
     const op = Thumb.PcLoad{
@@ -92,7 +92,7 @@ test "PcLoad.encode" {
     try testing.expectEqual(op, Thumb.decode(code).pc_load);
 }
 
-test "RegOffset.encode" {
+test "RegOffset encode/decode" {
     // str r3, [r2, r6]
     // (str rd, [rb, ro]
     const op = Thumb.RegOffset{
@@ -108,7 +108,7 @@ test "RegOffset.encode" {
     try testing.expectEqual(op, Thumb.decode(code).reg_offset);
 }
 
-test "MemSign.encode" {
+test "MemSign encode/decode" {
     // ldsb r0, [r5, r1]
     // (ldsb rd, [rb, ro]
     const op = Thumb.MemSign{
@@ -124,7 +124,7 @@ test "MemSign.encode" {
     try testing.expectEqual(op, Thumb.decode(code).mem_sign);
 }
 
-test "MemOffset.encode" {
+test "MemOffset encode/decode" {
     // str r1, [r0, #0xc]
     // (str rd, [rb, #imm])
     const op = Thumb.MemOffset{
@@ -142,7 +142,7 @@ test "MemOffset.encode" {
     try testing.expectEqual(op, Thumb.decode(code).mem_offset);
 }
 
-test "MemHalfword.encode" {
+test "MemHalfword encode/decode" {
     // ldrh r1, [r4, #6]
     // (ldrh rd, [rb, #imm])
     const op = Thumb.MemHalfword{
@@ -159,7 +159,7 @@ test "MemHalfword.encode" {
     try testing.expectEqual(op, Thumb.decode(code).mem_halfword);
 }
 
-test "AccessSp.encode" {
+test "AccessSp encode/decode" {
     // str r1, [sp, #8]
     // (str rd, [sp, #imm])
     const op = Thumb.AccessSp{
@@ -175,7 +175,7 @@ test "AccessSp.encode" {
     try testing.expectEqual(op, Thumb.decode(code).access_sp);
 }
 
-test "Load.encode" {
+test "Load encode/decode" {
     // add r5, sp, #0xc
     // (add rd, sp, #imm)
     const op = Thumb.Load{
@@ -191,7 +191,7 @@ test "Load.encode" {
     try testing.expectEqual(op, Thumb.decode(code).load);
 }
 
-test "AdjustSp.encode" {
+test "AdjustSp encode/decode" {
     // add sp, #0x18
     // (add sp, #imm)
     const op_add = Thumb.AdjustSp{
@@ -215,7 +215,7 @@ test "AdjustSp.encode" {
     try testing.expectEqual(op_sub, Thumb.decode(code_sub).adjust_sp);
 }
 
-test "Stack.encode" {
+test "Stack encode/decode" {
     // pop {r4, r5, r6, r7}
     // (pop {rlist})
     const op_pop = Thumb.Stack{
@@ -249,7 +249,7 @@ test "undefined range within Stack opcodes" {
     try ctest.expectEqualHex(op_set_bit_9_l1, Thumb.decode(op_set_bit_9_l1).undef.op);
 }
 
-test "MemMultiple.encode" {
+test "MemMultiple encode/decode" {
     // stmia r0!, {r3-r7}
     // stmia rb!, {rlist}
     const op = Thumb.MemMultiple{
@@ -263,7 +263,7 @@ test "MemMultiple.encode" {
     try testing.expectEqual(op, Thumb.decode(code).mem_multiple);
 }
 
-test "CondBranch.encode" {
+test "CondBranch encode/decode" {
     // "The branch offset must take account of the prefetch operation,
     // which causes the PCto be 1 word (4 bytes) ahead of the current instruction."
 
@@ -291,7 +291,7 @@ test "CondBranch.encode" {
     try testing.expectEqual(Thumb.Undefined{ .op = code_undef }, Thumb.decode(code_undef).undef);
 }
 
-test "SoftwareInterrupt.encode" {
+test "SoftwareInterrupt encode/decode" {
     // swi 0xab
     const op = Thumb.SoftwareInterrupt{
         .val = 0xab,
@@ -302,7 +302,7 @@ test "SoftwareInterrupt.encode" {
     try testing.expectEqual(op, Thumb.decode(code).software_interrupt);
 }
 
-test "Branch.encode" {
+test "Branch encode/decode" {
     // b +0xac
     const op_forward = Thumb.Branch{
         .offset = (0xac - 4) >> 1,
@@ -325,7 +325,7 @@ test "undefined range from 0xe800 to 0xefff" {
     try testing.expectEqual(Thumb.Undefined{ .op = code }, Thumb.decode(code).undef);
 }
 
-test "LongBranch.encode" {
+test "LongBranch encode/decode" {
     // Upper bits first
     const op_upper = Thumb.LongBranch{
         .h = .high,
