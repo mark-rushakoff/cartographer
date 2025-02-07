@@ -2,6 +2,10 @@ pub const Arm = union(enum) {
     branch_exchange: BranchExchange,
     branch_link: BranchLink,
     data_process: DataProcess,
+    mrs: Mrs,
+    msr: Msr,
+    msr_flags: MsrFlags,
+    mul: Multiply,
 
     /// The condition field, part of every(?) ARM instruction.
     ///
@@ -287,9 +291,17 @@ pub const Arm = union(enum) {
     /// Section 4.6.
     pub const MsrFlags = struct {
         cond: Cond,
+        // i bit is implied through operand enum.
         dst: enum(u1) {
             current = 0,
             saved = 1,
+
+            fn bits(self: @This()) u32 {
+                return switch (self) {
+                    .current => 0,
+                    .saved => 1 << 22,
+                };
+            }
         },
         op: Operand,
 
@@ -297,7 +309,7 @@ pub const Arm = union(enum) {
             register: struct {
                 rm: u4,
 
-                pub fn bits(self: @This()) u12 {
+                fn bits(self: @This()) u12 {
                     return self.rm;
                 }
             },
@@ -305,33 +317,100 @@ pub const Arm = union(enum) {
                 rot: u4,
                 imm: u8,
 
-                pub fn bits(self: @This()) u12 {
+                fn bits(self: @This()) u12 {
                     return @as(u12, self.rot) << 8 |
                         self.imm;
                 }
             },
 
-            pub fn bits(self: @This()) u32 {
+            fn bits(self: @This()) u32 {
                 return switch (self) {
                     .register => @as(u32, self.register.bits()),
                     .immediate => 1 << 25 | @as(u32, self.immediate.bits()),
                 };
             }
+
+            fn decode(op: u32) @This() {
+                if ((op & (1 << 25)) == 0) {
+                    return .{
+                        .register = .{
+                            .rm = @truncate(op & 0xf),
+                        },
+                    };
+                }
+
+                return .{
+                    .immediate = .{
+                        .rot = @truncate((op >> 8) & 0xf),
+                        .imm = @truncate(op & 0xff),
+                    },
+                };
+            }
         };
 
-        pub fn encode(self: Mrs) u32 {
+        pub fn encode(self: MsrFlags) u32 {
+            const p: u32 = switch (self.dst) {
+                .current => 0,
+                .saved => 1 << 22,
+            };
             return self.cond.bits() |
-                1 << 24 |
-                @as(u32, @intFromEnum(self.src)) << 22 |
-                0xf << 16 |
-                @as(u32, self.rd) << 12;
+                0x128f << 12 |
+                p |
+                self.op.bits();
         }
 
-        pub fn decode(op: u32) Mrs {
+        pub fn decode(op: u32) MsrFlags {
             return .{
                 .cond = Cond.fromOpcode(op),
-                .src = @enumFromInt((op >> 22) & 1),
-                .rd = @truncate(op >> 12),
+                .dst = @enumFromInt((op >> 22) & 1),
+                .op = Operand.decode(op),
+            };
+        }
+    };
+
+    /// Multiply and Multiply-Accumulate.
+    ///
+    /// "The multiply form of the instruction gives Rd:=Rm*Rs. Rn is ignored, and should be
+    /// set to zero for compatibility with possible future upgrades to the instruction set.
+    ///
+    /// "The multiply-accumulate form gives Rd:=Rm*Rs+Rn, which can save an explicit ADD
+    /// instruction in some circumstances."
+    ///
+    /// Section 4.7.
+    pub const Multiply = struct {
+        cond: Cond,
+        /// Whether to accumulate with the multiply.
+        a: u1,
+
+        /// Whether to set the condition codes with the multiply.
+        s: u1,
+
+        rd: u4,
+        rn: u4,
+        rs: u4,
+        rm: u4,
+
+        pub fn encode(self: Multiply) u32 {
+            return self.cond.bits() |
+                @as(u32, self.a) << 21 |
+                @as(u32, self.s) << 20 |
+                @as(u32, self.rd) << 16 |
+                @as(u32, self.rn) << 12 |
+                @as(u32, self.rs) << 8 |
+                9 << 4 |
+                self.rm;
+        }
+
+        pub fn decode(op: u32) Multiply {
+            return .{
+                .cond = Cond.fromOpcode(op),
+                .a = @truncate((op >> 21) & 1),
+                .s = @truncate((op >> 20) & 1),
+
+                .rd = @truncate((op >> 16) & 0xf),
+                .rn = @truncate((op >> 12) & 0xf),
+                .rs = @truncate((op >> 8) & 0xf),
+                .rm = @truncate(op & 0xf),
             };
         }
     };
@@ -357,6 +436,11 @@ pub const Arm = union(enum) {
     /// Decode an instruction where the two most significant bits
     /// after the condition are both zero.
     fn decodeEarlyOp(op: u32, trunc: u28) Arm {
+        // We consistently use the trunc value in this function,
+        // with the hopes that the compiler can do some optimizations
+        // based on values we inspect on it.
+        // The compiler likely won't assume that trunc & op == trunc.
+
         // Branch and exchange is a special bit pattern.
         // It's a bit hard to tell exactly what the logic is,
         // in terms of how this overlaps other instructions.
@@ -367,23 +451,48 @@ pub const Arm = union(enum) {
             };
         }
 
+        if ((trunc & 0xfc0_00f0) == 0x90) {
+            return .{
+                .mul = Multiply.decode(op),
+            };
+        }
+
         // Section 4.6:
         // "The MRS and MSR instructions are formed from a subset of the Data Processing
         // operations and are implemented using the TEQ, TST, CMN and CMP instructions
         // without the S flag set."
         if ((trunc & (1 << 20)) == 0) {
-            // S flag is clear.
-            const opcode: DataProcess.OpCode = @enumFromInt((trunc >> 21) & 0xf);
+            // S flag is clear,
+            // so now check if the opcode is one of the special cases.
+            const opcode_bits: u4 = @truncate((trunc >> 21) & 0xf);
 
-            switch (opcode) {
-                // TODO: handle these four special cases,
-                // however they map to MSR and MRS.
-                .teq => {},
-                .tst => {},
-                .cmn => {},
-                .cmp => {},
+            // It's more straightforward to directly inspect the bits
+            // that would make up the opcode,
+            // which would normally occupy bits 21-24.
+            //
+            // 24 23 22 21
+            //  1  0  x  0 -> Mrs
+            //  1  0  x  1 -> Msr
+            //  1  0  x  1 -> MsrFlags
 
-                else => {},
+            switch (opcode_bits) {
+                0b1000, 0b1010 => return .{
+                    .mrs = Mrs.decode(op),
+                },
+                0b1001, 0b1011 => {
+                    if ((trunc & (1 << 16)) > 0) {
+                        // This middle bit differentiates Msr from MsrFlags.
+                        return .{
+                            .msr = Msr.decode(op),
+                        };
+                    }
+
+                    return .{
+                        .msr_flags = MsrFlags.decode(op),
+                    };
+                },
+
+                else => {}, // Keep going.
             }
         }
         return .{ .data_process = DataProcess.decode(op) };

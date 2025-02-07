@@ -66,4 +66,78 @@ test "DataProcess encode/decode" {
     // TODO: more configurations of DataProcess.
 }
 
-// TODO: Mrs, Msr, MsrFlags tests.
+test "Mrs encode/decode" {
+    const op = Arm.Mrs{
+        .cond = .ne,
+        .src = .current,
+        .rd = 6,
+    };
+    const code: u32 =
+        Arm.Cond.ne.bits() |
+        1 << 24 |
+        // src is 0.
+        0xf << 16 |
+        6 << 12; // rd.
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Arm.decode(code).mrs);
+}
+
+test "Msr encode/decode" {
+    const op = Arm.Msr{
+        .cond = .hi,
+        .dst = .saved,
+        .rm = 9,
+    };
+    const code: u32 =
+        Arm.Cond.hi.bits() |
+        1 << 24 |
+        1 << 22 | // dst is 1.
+        0x29f << 12 |
+        9; // rm.
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Arm.decode(code).msr);
+}
+
+test "MsrFlags encode/decode" {
+    const op = Arm.MsrFlags{
+        .cond = .mi,
+        .dst = .saved,
+        .op = .{
+            .immediate = .{ .rot = 3, .imm = 123 },
+        },
+    };
+    const code: u32 =
+        Arm.Cond.mi.bits() |
+        1 << 25 | // i=1 for immediate.
+        1 << 24 |
+        1 << 22 | // dst is 1.
+        0x128f << 12 |
+        3 << 8 | // Rotate.
+        123; // Immediate.
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Arm.decode(code).msr_flags);
+}
+
+test "Multiply encode/decode" {
+    const op_mul = Arm.Multiply{
+        .cond = .pl,
+        .a = 0,
+        .s = 1,
+
+        .rd = 3,
+        .rn = 0,
+        .rs = 4,
+        .rm = 5,
+    };
+    const code_mul: u32 =
+        Arm.Cond.pl.bits() |
+        // a is 0.
+        1 << 20 | // s=1.
+        3 << 16 | // rd=3.
+        // rn=0.
+        4 << 8 | // rn=4.
+        9 << 4 | // Constant bits.
+        5; // rm.
+    try ctest.expectEqualHex(code_mul, op_mul.encode());
+    try testing.expectEqual(op_mul, Arm.decode(code_mul).mul);
+}
