@@ -6,6 +6,8 @@ pub const Arm = union(enum) {
     msr: Msr,
     msr_flags: MsrFlags,
     mul: Multiply,
+    mull: MultiplyLong,
+    single_data_transfer: SingleDataTransfer,
 
     /// The condition field, part of every(?) ARM instruction.
     ///
@@ -415,6 +417,190 @@ pub const Arm = union(enum) {
         }
     };
 
+    /// Multiply Long and Multiply-Accumulate Long.
+    ///
+    /// "The multiply long instructions perform integer multiplication on two 32 bit operands
+    /// and produce 64 bit results."
+    /// Section 4.8.
+    pub const MultiplyLong = struct {
+        cond: Cond,
+        sign: enum(u1) {
+            unsigned = 0,
+            signed = 1,
+
+            fn bits(self: @This()) u32 {
+                return switch (self) {
+                    .unsigned => 0,
+                    .signed => 1 << 22,
+                };
+            }
+        },
+
+        /// Whether to accumulate with the multiply.
+        a: u1,
+
+        /// Whether to set the condition codes with the multiply.
+        s: u1,
+
+        rd_hi: u4,
+        rd_lo: u4,
+        rs: u4,
+        rm: u4,
+
+        pub fn encode(self: MultiplyLong) u32 {
+            return self.cond.bits() |
+                1 << 23 |
+                self.sign.bits() |
+                @as(u32, self.a) << 21 |
+                @as(u32, self.s) << 20 |
+                @as(u32, self.rd_hi) << 16 |
+                @as(u32, self.rd_lo) << 12 |
+                @as(u32, self.rs) << 8 |
+                9 << 4 |
+                self.rm;
+        }
+
+        pub fn decode(op: u32) MultiplyLong {
+            return .{
+                .cond = Cond.fromOpcode(op),
+                .sign = @enumFromInt((op >> 22) & 1),
+
+                .a = @truncate((op >> 21) & 1),
+                .s = @truncate((op >> 20) & 1),
+
+                .rd_hi = @truncate((op >> 16) & 0xf),
+                .rd_lo = @truncate((op >> 12) & 0xf),
+                .rs = @truncate((op >> 8) & 0xf),
+                .rm = @truncate(op & 0xf),
+            };
+        }
+    };
+
+    /// Single Data Transfer.
+    ///
+    /// "The single data transfer instructions are used to load or store single bytes or words of data."
+    ///
+    /// Section 4.9.
+    pub const SingleDataTransfer = struct {
+        cond: Cond,
+        // i value implied through offset union.
+
+        p: enum(u1) {
+            post = 0,
+            pre = 1,
+
+            fn bits(self: @This()) u32 {
+                return switch (self) {
+                    .post => 0,
+                    .pre => 1 << 24,
+                };
+            }
+        },
+
+        u: enum(u1) {
+            down = 0,
+            up = 1,
+
+            fn bits(self: @This()) u32 {
+                return switch (self) {
+                    .down => 0,
+                    .up => 1 << 23,
+                };
+            }
+        },
+
+        b: enum(u1) {
+            word = 0,
+            byte = 1,
+
+            fn bits(self: @This()) u32 {
+                return switch (self) {
+                    .word => 0,
+                    .byte => 1 << 22,
+                };
+            }
+        },
+
+        w: u1,
+
+        l: enum(u1) {
+            store = 0,
+            load = 1,
+
+            fn bits(self: @This()) u32 {
+                return switch (self) {
+                    .store => 0,
+                    .load => 1 << 20,
+                };
+            }
+        },
+
+        rn: u4,
+        rd: u4,
+
+        offset: Offset,
+
+        pub const Offset = union(enum) {
+            imm: u12,
+            reg: struct {
+                shift: u8,
+                rm: u4,
+            },
+
+            fn bits(self: @This()) u32 {
+                return switch (self) {
+                    .imm => self.imm,
+                    .reg => 1 << 25 |
+                        @as(u32, self.reg.shift) << 4 |
+                        self.reg.rm,
+                };
+            }
+
+            fn decode(op: u32) @This() {
+                if ((op & (1 << 25)) > 0) {
+                    return .{
+                        .reg = .{
+                            .shift = @truncate((op >> 4) & 0xff),
+                            .rm = @truncate(op & 0xf),
+                        },
+                    };
+                }
+
+                return .{
+                    .imm = @truncate(op & 0xfff),
+                };
+            }
+        };
+
+        pub fn encode(self: SingleDataTransfer) u32 {
+            return self.cond.bits() |
+                1 << 26 | // Constant bit.
+                // Skip i, that is part of offset.bits.
+                @as(u32, @intFromEnum(self.p)) << 24 |
+                @as(u32, @intFromEnum(self.u)) << 23 |
+                @as(u32, @intFromEnum(self.b)) << 22 |
+                @as(u32, self.w) << 21 |
+                @as(u32, @intFromEnum(self.l)) << 20 |
+                @as(u32, self.rn) << 16 |
+                @as(u32, self.rd) << 12 |
+                self.offset.bits();
+        }
+
+        pub fn decode(op: u32) SingleDataTransfer {
+            return .{
+                .cond = Cond.fromOpcode(op),
+                .p = @enumFromInt((op >> 24) & 1),
+                .u = @enumFromInt((op >> 23) & 1),
+                .b = @enumFromInt((op >> 22) & 1),
+                .w = @truncate((op >> 21) & 1),
+                .l = @enumFromInt((op >> 20) & 1),
+                .rn = @truncate((op >> 16) & 0xf),
+                .rd = @truncate((op >> 8) & 0xf),
+                .offset = Offset.decode(op),
+            };
+        }
+    };
+
     pub fn decode(op: u32) Arm {
         // The top 4 bits are the condition,
         // which has no influence on which opcode we decode.
@@ -426,6 +612,7 @@ pub const Arm = union(enum) {
             // TODO: Handle full u28 range here.
 
             0x000_0000...0x3ff_ffff => decodeEarlyOp(op, trunc),
+            0x400_0000...0x7ff_ffff => decodeSingleDataTransfer(op),
 
             0xa00_0000...0xbff_ffff => .{ .branch_link = BranchLink.decode(op) },
 
@@ -454,6 +641,12 @@ pub const Arm = union(enum) {
         if ((trunc & 0xfc0_00f0) == 0x90) {
             return .{
                 .mul = Multiply.decode(op),
+            };
+        }
+
+        if ((trunc & 0xf80_00f0) == 0x80_0090) {
+            return .{
+                .mull = MultiplyLong.decode(op),
             };
         }
 
@@ -496,6 +689,14 @@ pub const Arm = union(enum) {
             }
         }
         return .{ .data_process = DataProcess.decode(op) };
+    }
+
+    fn decodeSingleDataTransfer(op: u32) Arm {
+        // TODO: this isn't quite right,
+        // it should return undefined for that specific range in Figure 4-1.
+        return .{
+            .single_data_transfer = SingleDataTransfer.decode(op),
+        };
     }
 };
 

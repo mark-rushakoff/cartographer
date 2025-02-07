@@ -141,3 +141,67 @@ test "Multiply encode/decode" {
     try ctest.expectEqualHex(code_mul, op_mul.encode());
     try testing.expectEqual(op_mul, Arm.decode(code_mul).mul);
 }
+
+test "MultiplyLong encode/decode" {
+    const op_mul = Arm.MultiplyLong{
+        .cond = .lt,
+        .sign = .unsigned,
+        .a = 1,
+        .s = 0,
+
+        .rd_hi = 8,
+        .rd_lo = 9,
+        .rs = 10,
+        .rm = 11,
+    };
+    const code_mul: u32 =
+        Arm.Cond.lt.bits() |
+        1 << 23 | // Constant bit.
+        // u (unsigned) is 0.
+        1 << 21 | // a=1.
+        // s=0.
+        8 << 16 | // rdhi=8.
+        9 << 12 | // rdlo=9.
+        10 << 8 | // rs=10.
+        9 << 4 | // Constant bits.
+        11; // rm.
+    try ctest.expectEqualHex(code_mul, op_mul.encode());
+    try testing.expectEqual(op_mul, Arm.decode(code_mul).mull);
+}
+
+test "SingleDataTransfer encode/decode" {
+    const op_reg = Arm.SingleDataTransfer{
+        .cond = .gt,
+        .p = .pre,
+        .u = .up,
+        .b = .word,
+        .w = 1,
+
+        .l = .store,
+
+        .rn = 3,
+        .rd = 7,
+
+        .offset = .{
+            .reg = .{
+                .shift = 123,
+                .rm = 2,
+            },
+        },
+    };
+    const code_reg: u32 =
+        Arm.Cond.gt.bits() |
+        1 << 26 | // Constant bit.
+        1 << 25 | // i=1 for register offset.
+        1 << 24 | // p=1.
+        1 << 23 | // u=1.
+        // b=0.
+        1 << 21 | // w=1.
+        // l=0.
+        3 << 16 | // rn=3.
+        7 << 12 | // rd=7.
+        123 << 4 | // Shift.
+        2; // rm.
+    try ctest.expectEqualHex(code_reg, op_reg.encode());
+    try testing.expectEqual(op_reg, Arm.decode(code_reg).single_data_transfer);
+}
