@@ -236,3 +236,28 @@ test "HalfDataTransfer encode/decode" {
 
     // TODO: test for offset=immediate.
 }
+
+test "BlockDataTransfer encode/decode" {
+    const op: Arm.BlockDataTransfer = .{
+        .cond = .le,
+        .p = .pre,
+        .u = .down,
+        .s = 1,
+        .w = 1,
+        .l = .store,
+        .rn = 11,
+        .rlist = 0xf3,
+    };
+    const code: u32 =
+        Arm.Cond.le.bits() |
+        1 << 27 | // Fixed bit.
+        1 << 24 | // p=1.
+        // u=0.
+        1 << 22 | // s=1.
+        1 << 21 | // w=1.
+        // l=0.
+        11 << 16 |
+        0xf3;
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Arm.decode(code).block_data_transfer);
+}

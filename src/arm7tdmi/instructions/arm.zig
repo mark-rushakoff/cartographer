@@ -9,6 +9,7 @@ pub const Arm = union(enum) {
     mull: MultiplyLong,
     single_data_transfer: SingleDataTransfer,
     half_data_transfer: HalfDataTransfer,
+    block_data_transfer: BlockDataTransfer,
 
     /// The condition field, part of every(?) ARM instruction.
     ///
@@ -654,6 +655,53 @@ pub const Arm = union(enum) {
         const fixed_bits = 0x90;
     };
 
+    /// Block Data Transfer.
+    ///
+    /// "Block data transfer instructions are used to load (LDM) or store (STM) any subset of
+    /// the currently visible registers."
+    ///
+    /// Section 4.11.
+    pub const BlockDataTransfer = struct {
+        cond: Cond,
+
+        p: op_bits.PrePostIndexing(24),
+        u: op_bits.UpDown(23),
+        s: u1, // TODO?
+        w: u1, // TODO?
+        l: op_bits.LoadStore(20),
+
+        rn: u4,
+        rlist: u16,
+
+        pub fn encode(self: BlockDataTransfer) u32 {
+            return fixed_bits |
+                self.cond.bits() |
+                self.p.bits() |
+                self.u.bits() |
+                @as(u32, self.s) << 22 |
+                @as(u32, self.w) << 21 |
+                self.l.bits() |
+                @as(u32, self.rn) << 16 |
+                self.rlist;
+        }
+
+        pub fn decode(op: u32) BlockDataTransfer {
+            return .{
+                .cond = Cond.fromOpcode(op),
+                .p = @enumFromInt((op >> 24) & 1),
+                .u = @enumFromInt((op >> 23) & 1),
+                .s = @truncate((op >> 22) & 1),
+                .w = @truncate((op >> 21) & 1),
+                .l = @enumFromInt((op >> 20) & 1),
+                .rn = @truncate((op >> 16) & 0xf),
+                .rlist = @truncate(op & 0xff),
+            };
+        }
+
+        const const_mask = 0xe00_0000;
+        const fixed_bits = 0x800_0000;
+    };
+
     pub fn decode(op: u32) Arm {
         // The top 4 bits are the condition,
         // which has no influence on which opcode we decode.
@@ -666,6 +714,7 @@ pub const Arm = union(enum) {
 
             0x000_0000...0x3ff_ffff => decodeEarlyOp(op, trunc),
             0x400_0000...0x7ff_ffff => decodeSingleDataTransfer(op),
+            0x800_0000...0x9ff_ffff => .{ .block_data_transfer = BlockDataTransfer.decode(op) },
 
             0xa00_0000...0xbff_ffff => .{ .branch_link = BranchLink.decode(op) },
 
