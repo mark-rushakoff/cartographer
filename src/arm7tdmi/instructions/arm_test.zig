@@ -205,3 +205,34 @@ test "SingleDataTransfer encode/decode" {
     try ctest.expectEqualHex(code_reg, op_reg.encode());
     try testing.expectEqual(op_reg, Arm.decode(code_reg).single_data_transfer);
 }
+
+test "HalfDataTransfer encode/decode" {
+    const op_swp: Arm.HalfDataTransfer = .{
+        .cond = .ls,
+        .p = .post,
+        .u = .up,
+        .w = 1,
+        .l = .store,
+        .rn = 1,
+        .rd = 6,
+        .sh = .s_byte,
+        .offset = .{
+            .rm = 11,
+        },
+    };
+    const code_swp: u32 =
+        Arm.Cond.ls.bits() |
+        // p=0
+        1 << 23 | // u=1.
+        1 << 21 | // w=1.
+        // l=0
+        1 << 16 | // rn=1.
+        6 << 12 | // rd=6.
+        9 << 4 | // Constant bits.
+        2 << 5 | // sh=signed byte.
+        11; // rm=11.
+    try ctest.expectEqualHex(code_swp, op_swp.encode());
+    try testing.expectEqual(op_swp, Arm.decode(code_swp).half_data_transfer);
+
+    // TODO: test for offset=immediate.
+}

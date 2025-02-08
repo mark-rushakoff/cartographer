@@ -8,6 +8,7 @@ pub const Arm = union(enum) {
     mul: Multiply,
     mull: MultiplyLong,
     single_data_transfer: SingleDataTransfer,
+    half_data_transfer: HalfDataTransfer,
 
     /// The condition field, part of every(?) ARM instruction.
     ///
@@ -55,7 +56,7 @@ pub const Arm = union(enum) {
 
         pub fn encode(self: BranchExchange) u32 {
             return self.cond.bits() |
-                0x012f_ff10 |
+                fixed_bits |
                 @as(u32, self.rn);
         }
 
@@ -65,6 +66,9 @@ pub const Arm = union(enum) {
                 .rn = @truncate(op & 0xf),
             };
         }
+
+        const const_mask = 0x3ff_fff0;
+        const fixed_bits = 0x12f_ff10;
     };
 
     /// Branch and Branch with Link (B, BL).
@@ -393,13 +397,13 @@ pub const Arm = union(enum) {
         rm: u4,
 
         pub fn encode(self: Multiply) u32 {
-            return self.cond.bits() |
+            return fixed_bits |
+                self.cond.bits() |
                 @as(u32, self.a) << 21 |
                 @as(u32, self.s) << 20 |
                 @as(u32, self.rd) << 16 |
                 @as(u32, self.rn) << 12 |
                 @as(u32, self.rs) << 8 |
-                9 << 4 |
                 self.rm;
         }
 
@@ -415,6 +419,9 @@ pub const Arm = union(enum) {
                 .rm = @truncate(op & 0xf),
             };
         }
+
+        const const_mask = 0xfc0_00f0;
+        const fixed_bits = 0x90;
     };
 
     /// Multiply Long and Multiply-Accumulate Long.
@@ -448,15 +455,14 @@ pub const Arm = union(enum) {
         rm: u4,
 
         pub fn encode(self: MultiplyLong) u32 {
-            return self.cond.bits() |
-                1 << 23 |
+            return fixed_bits |
+                self.cond.bits() |
                 self.sign.bits() |
                 @as(u32, self.a) << 21 |
                 @as(u32, self.s) << 20 |
                 @as(u32, self.rd_hi) << 16 |
                 @as(u32, self.rd_lo) << 12 |
                 @as(u32, self.rs) << 8 |
-                9 << 4 |
                 self.rm;
         }
 
@@ -474,6 +480,9 @@ pub const Arm = union(enum) {
                 .rm = @truncate(op & 0xf),
             };
         }
+
+        const const_mask = 0xf80_00f0;
+        const fixed_bits = 0x080_0090;
     };
 
     /// Single Data Transfer.
@@ -601,6 +610,130 @@ pub const Arm = union(enum) {
         }
     };
 
+    /// Halfword and Signed Data Transfer.
+    ///
+    /// "These instructions are used to load or store half-words of data and also load
+    /// sign-extended bytes or half-words of data."
+    ///
+    /// Section 4.10.
+    pub const HalfDataTransfer = struct {
+        cond: Cond,
+
+        p: enum(u1) {
+            post = 0,
+            pre = 1,
+
+            fn bits(self: @This()) u32 {
+                return switch (self) {
+                    .post => 0,
+                    .pre => 1 << 24,
+                };
+            }
+        },
+
+        u: enum(u1) {
+            down = 0,
+            up = 1,
+
+            fn bits(self: @This()) u32 {
+                return switch (self) {
+                    .down => 0,
+                    .up => 1 << 23,
+                };
+            }
+        },
+
+        w: u1,
+
+        l: enum(u1) {
+            store = 0,
+            load = 1,
+
+            fn bits(self: @This()) u32 {
+                return switch (self) {
+                    .store => 0,
+                    .load => 1 << 20,
+                };
+            }
+        },
+
+        rn: u4,
+        rd: u4,
+
+        sh: enum(u2) {
+            // swp would be zero,
+            // but that is a separate instruction.
+            // Avoiding an enum value for zero
+            // should help ensure we don't have any paths within HalfDataTransfer
+            // that assume swp.
+
+            u_half = 0b01,
+            s_byte = 0b10,
+            s_half = 0b11,
+        },
+
+        offset: Offset,
+
+        pub const Offset = union(enum) {
+            rm: u4,
+            imm: u8,
+
+            pub fn bits(self: @This()) u32 {
+                return switch (self) {
+                    .rm => self.rm,
+                    .imm => @as(u32, 1 << 22) |
+                        ((self.imm & 0xf0) << 4) |
+                        (self.imm & 0xf),
+                };
+            }
+
+            fn decode(op: u32) @This() {
+                if ((op & (1 << 22)) > 0) {
+                    return .{
+                        .imm = @as(u8, @truncate((op & 0xf00) >> 4)) |
+                            @as(u8, @truncate(op & 0xf)),
+                    };
+                }
+
+                return .{
+                    .rm = @truncate(op & 0xf),
+                };
+            }
+        };
+
+        pub fn encode(self: HalfDataTransfer) u32 {
+            return self.cond.bits() |
+                self.p.bits() |
+                self.u.bits() |
+                @as(u32, self.w) << 21 |
+                self.l.bits() |
+                @as(u32, self.rn) << 16 |
+                @as(u32, self.rd) << 12 |
+                9 << 4 | // Constant bits.
+                @as(u32, @intFromEnum(self.sh)) << 5 |
+                self.offset.bits();
+        }
+
+        pub fn decode(op: u32) HalfDataTransfer {
+            return .{
+                .cond = Cond.fromOpcode(op),
+                .p = @enumFromInt((op >> 24) & 1),
+                .u = @enumFromInt((op >> 23) & 1),
+                .w = @truncate((op >> 21) & 1),
+                .l = @enumFromInt((op >> 20) & 1),
+                .rn = @truncate((op >> 16) & 0xf),
+                .rd = @truncate((op >> 12) & 0xf),
+
+                .sh = @enumFromInt((op >> 5) & 3),
+
+                .offset = Offset.decode(op),
+            };
+        }
+
+        const const_mask = 0xe00_0090;
+        const fixed_bits = 0x90;
+    };
+
     pub fn decode(op: u32) Arm {
         // The top 4 bits are the condition,
         // which has no influence on which opcode we decode.
@@ -632,21 +765,30 @@ pub const Arm = union(enum) {
         // It's a bit hard to tell exactly what the logic is,
         // in terms of how this overlaps other instructions.
         // Hopefully we can find a simpler approach than this one.
-        if ((trunc & 0x3ff_fff0) == 0x12f_ff10) {
+        if ((trunc & BranchExchange.const_mask) == BranchExchange.fixed_bits) {
             return .{
                 .branch_exchange = BranchExchange.decode(op),
             };
         }
 
-        if ((trunc & 0xfc0_00f0) == 0x90) {
+        if ((trunc & Multiply.const_mask) == Multiply.fixed_bits) {
             return .{
                 .mul = Multiply.decode(op),
             };
         }
 
-        if ((trunc & 0xf80_00f0) == 0x80_0090) {
+        if ((trunc & MultiplyLong.const_mask) == MultiplyLong.fixed_bits) {
             return .{
                 .mull = MultiplyLong.decode(op),
+            };
+        }
+
+        // Note: if HalfDataTransfer.sh == 0
+        // (which is disallowed as that would indicate the SWP instruction)
+        // then our HalfDataTransfer would falsely match MultiplyLong's bitmask.
+        if ((trunc & HalfDataTransfer.const_mask) == HalfDataTransfer.fixed_bits) {
+            return .{
+                .half_data_transfer = HalfDataTransfer.decode(op),
             };
         }
 
