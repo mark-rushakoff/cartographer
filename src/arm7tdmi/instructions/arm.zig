@@ -230,16 +230,13 @@ pub const Arm = union(enum) {
     /// Section 4.6.
     pub const Mrs = struct {
         cond: Cond,
-        src: enum(u1) {
-            current = 0,
-            saved = 1,
-        },
+        src: op_bits.Psr(22),
         rd: u4,
 
         pub fn encode(self: Mrs) u32 {
             return self.cond.bits() |
                 1 << 24 |
-                @as(u32, @intFromEnum(self.src)) << 22 |
+                self.src.bits() |
                 0xf << 16 |
                 @as(u32, self.rd) << 12;
         }
@@ -265,16 +262,13 @@ pub const Arm = union(enum) {
     /// Section 4.6.
     pub const Msr = struct {
         cond: Cond,
-        dst: enum(u1) {
-            current = 0,
-            saved = 1,
-        },
+        dst: op_bits.Psr(22),
         rm: u4,
 
         pub fn encode(self: Msr) u32 {
             return self.cond.bits() |
                 1 << 24 |
-                @as(u32, @intFromEnum(self.dst)) << 22 |
+                self.dst.bits() |
                 0x29f << 12 |
                 @as(u32, self.rm);
         }
@@ -298,17 +292,7 @@ pub const Arm = union(enum) {
     pub const MsrFlags = struct {
         cond: Cond,
         // i bit is implied through operand enum.
-        dst: enum(u1) {
-            current = 0,
-            saved = 1,
-
-            fn bits(self: @This()) u32 {
-                return switch (self) {
-                    .current => 0,
-                    .saved => 1 << 22,
-                };
-            }
-        },
+        dst: op_bits.Psr(22),
         op: Operand,
 
         pub const Operand = union(enum) {
@@ -355,13 +339,9 @@ pub const Arm = union(enum) {
         };
 
         pub fn encode(self: MsrFlags) u32 {
-            const p: u32 = switch (self.dst) {
-                .current => 0,
-                .saved => 1 << 22,
-            };
             return self.cond.bits() |
                 0x128f << 12 |
-                p |
+                self.dst.bits() |
                 self.op.bits();
         }
 
@@ -494,29 +474,9 @@ pub const Arm = union(enum) {
         cond: Cond,
         // i value implied through offset union.
 
-        p: enum(u1) {
-            post = 0,
-            pre = 1,
+        p: op_bits.PrePostIndexing(24),
 
-            fn bits(self: @This()) u32 {
-                return switch (self) {
-                    .post => 0,
-                    .pre => 1 << 24,
-                };
-            }
-        },
-
-        u: enum(u1) {
-            down = 0,
-            up = 1,
-
-            fn bits(self: @This()) u32 {
-                return switch (self) {
-                    .down => 0,
-                    .up => 1 << 23,
-                };
-            }
-        },
+        u: op_bits.UpDown(23),
 
         b: enum(u1) {
             word = 0,
@@ -532,17 +492,7 @@ pub const Arm = union(enum) {
 
         w: u1,
 
-        l: enum(u1) {
-            store = 0,
-            load = 1,
-
-            fn bits(self: @This()) u32 {
-                return switch (self) {
-                    .store => 0,
-                    .load => 1 << 20,
-                };
-            }
-        },
+        l: op_bits.LoadStore(20),
 
         rn: u4,
         rd: u4,
@@ -619,43 +569,13 @@ pub const Arm = union(enum) {
     pub const HalfDataTransfer = struct {
         cond: Cond,
 
-        p: enum(u1) {
-            post = 0,
-            pre = 1,
+        p: op_bits.PrePostIndexing(24),
 
-            fn bits(self: @This()) u32 {
-                return switch (self) {
-                    .post => 0,
-                    .pre => 1 << 24,
-                };
-            }
-        },
-
-        u: enum(u1) {
-            down = 0,
-            up = 1,
-
-            fn bits(self: @This()) u32 {
-                return switch (self) {
-                    .down => 0,
-                    .up => 1 << 23,
-                };
-            }
-        },
+        u: op_bits.UpDown(23),
 
         w: u1,
 
-        l: enum(u1) {
-            store = 0,
-            load = 1,
-
-            fn bits(self: @This()) u32 {
-                return switch (self) {
-                    .store => 0,
-                    .load => 1 << 20,
-                };
-            }
-        },
+        l: op_bits.LoadStore(20),
 
         rn: u4,
         rd: u4,
@@ -838,6 +758,63 @@ pub const Arm = union(enum) {
         // it should return undefined for that specific range in Figure 4-1.
         return .{
             .single_data_transfer = SingleDataTransfer.decode(op),
+        };
+    }
+};
+
+/// Container for types representing specific bits in multiple instructions.
+/// If a type is only applicable to a single instruction,
+/// it will be inlined in that instruction definition.
+const op_bits = struct {
+    // It looks like all of these offset arguments are the same across all usages,
+    // but let's wait until every instruction is finished before changing them to constants.
+
+    /// P bit used in multiple instructions.
+    fn PrePostIndexing(comptime offset: u5) type {
+        return enum(u1) {
+            post = 0,
+            pre = 1,
+
+            fn bits(self: @This()) u32 {
+                return @as(u32, @intFromEnum(self)) << offset;
+            }
+        };
+    }
+
+    /// U bit used in multiple instructions.
+    fn UpDown(comptime offset: u5) type {
+        return enum(u1) {
+            down = 0,
+            up = 1,
+
+            fn bits(self: @This()) u32 {
+                return @as(u32, @intFromEnum(self)) << offset;
+            }
+        };
+    }
+
+    /// L bit used in multiple instructions.
+    fn LoadStore(comptime offset: u5) type {
+        return enum(u1) {
+            store = 0,
+            load = 1,
+
+            fn bits(self: @This()) u32 {
+                return @as(u32, @intFromEnum(self)) << offset;
+            }
+        };
+    }
+
+    /// P bit indicating whether a status register transfer
+    /// is affecting the current or saved PSR.
+    fn Psr(comptime offset: u5) type {
+        return enum(u1) {
+            current = 0,
+            saved = 1,
+
+            fn bits(self: @This()) u32 {
+                return @as(u32, @intFromEnum(self)) << offset;
+            }
         };
     }
 };
