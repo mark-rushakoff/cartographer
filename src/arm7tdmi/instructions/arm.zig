@@ -214,12 +214,6 @@ pub const Arm = union(enum) {
                 .rn = @truncate((op >> 16) & 0xf),
                 .rd = @truncate((op >> 12) & 0xf),
                 .op = Operand.decode(op),
-
-                // Example from some random thumb instruction:
-                // .op = @enumFromInt((op >> 11) & 3),
-                // .offset = @truncate((op >> 6) & 0x1f),
-                // .rs = @truncate((op >> 3) & 3),
-                // .rd = @truncate(op & 3),
             };
         }
     };
