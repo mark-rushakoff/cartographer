@@ -232,7 +232,7 @@ pub const Arm = union(enum) {
     /// Section 4.6.
     pub const Mrs = struct {
         cond: Cond,
-        src: op_bits.Psr(22),
+        src: op_bits.Psr,
         rd: u4,
 
         pub fn encode(self: Mrs) u32 {
@@ -264,7 +264,7 @@ pub const Arm = union(enum) {
     /// Section 4.6.
     pub const Msr = struct {
         cond: Cond,
-        dst: op_bits.Psr(22),
+        dst: op_bits.Psr,
         rm: u4,
 
         pub fn encode(self: Msr) u32 {
@@ -294,7 +294,7 @@ pub const Arm = union(enum) {
     pub const MsrFlags = struct {
         cond: Cond,
         // i bit is implied through operand enum.
-        dst: op_bits.Psr(22),
+        dst: op_bits.Psr,
         op: Operand,
 
         pub const Operand = union(enum) {
@@ -476,15 +476,13 @@ pub const Arm = union(enum) {
         cond: Cond,
         // i value implied through offset union.
 
-        p: op_bits.PrePostIndexing(24),
-
-        u: op_bits.UpDown(23),
-
+        p: op_bits.PrePostIndexing,
+        u: op_bits.UpDown,
         b: op_bits.ByteWord,
 
         w: u1,
 
-        l: op_bits.LoadStore(20),
+        l: op_bits.LoadStore,
 
         rn: u4,
         rd: u4,
@@ -561,13 +559,13 @@ pub const Arm = union(enum) {
     pub const HalfDataTransfer = struct {
         cond: Cond,
 
-        p: op_bits.PrePostIndexing(24),
+        p: op_bits.PrePostIndexing,
 
-        u: op_bits.UpDown(23),
+        u: op_bits.UpDown,
 
         w: u1,
 
-        l: op_bits.LoadStore(20),
+        l: op_bits.LoadStore,
 
         rn: u4,
         rd: u4,
@@ -655,11 +653,11 @@ pub const Arm = union(enum) {
     pub const BlockDataTransfer = struct {
         cond: Cond,
 
-        p: op_bits.PrePostIndexing(24),
-        u: op_bits.UpDown(23),
+        p: op_bits.PrePostIndexing,
+        u: op_bits.UpDown,
         s: u1, // TODO?
         w: u1, // TODO?
-        l: op_bits.LoadStore(20),
+        l: op_bits.LoadStore,
 
         rn: u4,
         rlist: u16,
@@ -841,57 +839,52 @@ pub const Arm = union(enum) {
 /// If a type is only applicable to a single instruction,
 /// it will be inlined in that instruction definition.
 const op_bits = struct {
-    // It looks like all of these offset arguments are the same across all usages,
-    // but let's wait until every instruction is finished before changing them to constants.
+    /// P bit used in SingleDataTransfer, HalfDataTransfer, and BlockDataTransfer.
+    /// It's always bit 24 regardless of the instruction.
+    const PrePostIndexing = enum(u1) {
+        post = 0,
+        pre = 1,
 
-    /// P bit used in multiple instructions.
-    fn PrePostIndexing(comptime offset: u5) type {
-        return enum(u1) {
-            post = 0,
-            pre = 1,
+        fn bits(self: @This()) u32 {
+            return @as(u32, @intFromEnum(self)) << 24;
+        }
+    };
 
-            fn bits(self: @This()) u32 {
-                return @as(u32, @intFromEnum(self)) << offset;
-            }
-        };
-    }
+    /// U bit used in SingleDataTransfer, HalfDataTransfer, and BlockDataTransfer.
+    /// It's always bit 23 regardless of the instruction.
+    const UpDown = enum(u1) {
+        down = 0,
+        up = 1,
 
-    /// U bit used in multiple instructions.
-    fn UpDown(comptime offset: u5) type {
-        return enum(u1) {
-            down = 0,
-            up = 1,
-
-            fn bits(self: @This()) u32 {
-                return @as(u32, @intFromEnum(self)) << offset;
-            }
-        };
-    }
+        fn bits(self: @This()) u32 {
+            return @as(u32, @intFromEnum(self)) << 23;
+        }
+    };
 
     /// L bit used in multiple instructions.
-    fn LoadStore(comptime offset: u5) type {
-        return enum(u1) {
-            store = 0,
-            load = 1,
+    /// L bit used in SingleDataTransfer, HalfDataTransfer, and BlockDataTransfer.
+    /// It's always bit 20 regardless of the instruction.
+    const LoadStore = enum(u1) {
+        store = 0,
+        load = 1,
 
-            fn bits(self: @This()) u32 {
-                return @as(u32, @intFromEnum(self)) << offset;
-            }
-        };
-    }
+        fn bits(self: @This()) u32 {
+            return @as(u32, @intFromEnum(self)) << 20;
+        }
+    };
 
     /// P bit indicating whether a status register transfer
     /// is affecting the current or saved PSR.
-    fn Psr(comptime offset: u5) type {
-        return enum(u1) {
-            current = 0,
-            saved = 1,
+    /// Used in Mrs, Msr, and MsrFlags.
+    /// It's always bit 22 regardless of the instruction.
+    const Psr = enum(u1) {
+        current = 0,
+        saved = 1,
 
-            fn bits(self: @This()) u32 {
-                return @as(u32, @intFromEnum(self)) << offset;
-            }
-        };
-    }
+        fn bits(self: @This()) u32 {
+            return @as(u32, @intFromEnum(self)) << 22;
+        }
+    };
 
     /// Byte or Word bit,
     /// used in SingleDataTransfer and Swap.
