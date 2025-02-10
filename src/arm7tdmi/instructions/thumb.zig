@@ -231,10 +231,7 @@ pub const Thumb = union(enum) {
     /// "These instructions transfer byte or word values between registers and memory.
     /// Memory addresses are pre-indexed using an offset register in the range 0-7."
     pub const RegOffset = struct {
-        l: enum(u1) {
-            store = 0,
-            load = 1,
-        },
+        l: op_bits.LoadStore,
         b: enum(u1) {
             word = 0,
             byte = 1,
@@ -245,7 +242,7 @@ pub const Thumb = union(enum) {
 
         pub fn encode(self: RegOffset) u16 {
             return 0x5000 |
-                (@as(u16, @intFromEnum(self.l)) << 11) |
+                self.l.bits() |
                 (@as(u16, @intFromEnum(self.b)) << 10) |
                 (@as(u16, self.ro) << 6) |
                 (@as(u16, self.rb) << 3) |
@@ -303,10 +300,7 @@ pub const Thumb = union(enum) {
             word = 0,
             byte = 1,
         },
-        l: enum(u1) {
-            store = 0,
-            load = 1,
-        },
+        l: op_bits.LoadStore,
         offset: u5,
         rb: u3,
         rd: u3,
@@ -314,7 +308,7 @@ pub const Thumb = union(enum) {
         pub fn encode(self: MemOffset) u16 {
             return 0x6000 |
                 (@as(u16, @intFromEnum(self.b)) << 12) |
-                (@as(u16, @intFromEnum(self.l)) << 11) |
+                self.l.bits() |
                 (@as(u16, self.offset) << 6) |
                 (@as(u16, self.rb) << 3) |
                 @as(u16, self.rd);
@@ -336,17 +330,14 @@ pub const Thumb = union(enum) {
     /// "These instructions transfer halfword values between a Lo register and memory.
     /// Addresses are pre-indexed, using a 6-bit immediate value."
     pub const MemHalfword = struct {
-        l: enum(u1) {
-            store = 0,
-            load = 1,
-        },
+        l: op_bits.LoadStore,
         offset: u5,
         rb: u3,
         rd: u3,
 
         pub fn encode(self: MemHalfword) u16 {
             return 0x8000 |
-                (@as(u16, @intFromEnum(self.l)) << 11) |
+                self.l.bits() |
                 (@as(u16, self.offset) << 6) |
                 (@as(u16, self.rb) << 3) |
                 @as(u16, self.rd);
@@ -366,16 +357,13 @@ pub const Thumb = union(enum) {
     ///
     /// "The instructions in this group perform an SP-relative load or store."
     pub const AccessSp = struct {
-        l: enum(u1) {
-            store = 0,
-            load = 1,
-        },
+        l: op_bits.LoadStore,
         rd: u3,
         val: u8,
 
         pub fn encode(self: AccessSp) u16 {
             return 0x9000 |
-                (@as(u16, @intFromEnum(self.l)) << 11) |
+                self.l.bits() |
                 (@as(u16, self.rd) << 8) |
                 @as(u16, self.val);
         }
@@ -453,10 +441,7 @@ pub const Thumb = union(enum) {
     /// and optionally LR to be pushed onto the stack,
     /// and registers 0-7 and optionally PC to be popped off the stack."
     pub const Stack = struct {
-        l: enum(u1) {
-            store = 0,
-            load = 1,
-        },
+        l: op_bits.LoadStore,
         r: enum(u1) {
             no_store = 0,
             store = 1,
@@ -465,7 +450,7 @@ pub const Thumb = union(enum) {
 
         pub fn encode(self: Stack) u16 {
             return 0xb400 |
-                (@as(u16, @intFromEnum(self.l)) << 11) |
+                self.l.bits() |
                 (@as(u16, @intFromEnum(self.r)) << 8) |
                 self.rlist;
         }
@@ -483,16 +468,13 @@ pub const Thumb = union(enum) {
     ///
     /// "These instructions allow multiple loading and storing of Lo registers."
     pub const MemMultiple = struct {
-        l: enum(u1) {
-            store = 0,
-            load = 1,
-        },
+        l: op_bits.LoadStore,
         rb: u3,
         rlist: u8,
 
         pub fn encode(self: MemMultiple) u16 {
             return 0xc000 |
-                (@as(u16, @intFromEnum(self.l)) << 11) |
+                self.l.bits() |
                 (@as(u16, self.rb) << 8) |
                 self.rlist;
         }
@@ -691,6 +673,20 @@ pub const Thumb = union(enum) {
 
         return .{ .stack = Stack.decode(op) };
     }
+};
+
+const op_bits = struct {
+    /// Whether the operation is a load or a store.
+    /// Used in RegOffset, MemOffset, MemHalfword, AccessSp, Stack, and MemMultiple.
+    /// It's always bit 11 regardless of the instruction.
+    const LoadStore = enum(u1) {
+        store = 0,
+        load = 1,
+
+        fn bits(self: @This()) u16 {
+            return @as(u16, @intFromEnum(self)) << 11;
+        }
+    };
 };
 
 test {
