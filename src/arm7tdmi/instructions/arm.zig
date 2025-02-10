@@ -10,6 +10,7 @@ pub const Arm = union(enum) {
     single_data_transfer: SingleDataTransfer,
     half_data_transfer: HalfDataTransfer,
     block_data_transfer: BlockDataTransfer,
+    swap: Swap,
 
     /// The condition field, part of every(?) ARM instruction.
     ///
@@ -479,17 +480,7 @@ pub const Arm = union(enum) {
 
         u: op_bits.UpDown(23),
 
-        b: enum(u1) {
-            word = 0,
-            byte = 1,
-
-            fn bits(self: @This()) u32 {
-                return switch (self) {
-                    .word => 0,
-                    .byte => 1 << 22,
-                };
-            }
-        },
+        b: op_bits.ByteWord,
 
         w: u1,
 
@@ -702,6 +693,38 @@ pub const Arm = union(enum) {
         const fixed_bits = 0x800_0000;
     };
 
+    pub const Swap = struct {
+        cond: Cond,
+
+        b: op_bits.ByteWord,
+
+        rn: u4,
+        rd: u4,
+        rm: u4,
+
+        pub fn encode(self: Swap) u32 {
+            return fixed_bits |
+                self.cond.bits() |
+                self.b.bits() |
+                @as(u32, self.rn) << 16 |
+                @as(u32, self.rd) << 12 |
+                self.rm;
+        }
+
+        pub fn decode(op: u32) Swap {
+            return .{
+                .cond = Cond.fromOpcode(op),
+                .b = @enumFromInt((op >> 22) & 1),
+                .rn = @truncate((op >> 16) & 0xf),
+                .rd = @truncate((op >> 12) & 0xf),
+                .rm = @truncate(op & 0xf),
+            };
+        }
+
+        const const_mask = 0xfb0_0ff0;
+        const fixed_bits = 0x100_0090;
+    };
+
     pub fn decode(op: u32) Arm {
         // The top 4 bits are the condition,
         // which has no influence on which opcode we decode.
@@ -710,15 +733,12 @@ pub const Arm = union(enum) {
         // Max u28 in hex would be 0xfff_ffff.
 
         return switch (trunc) {
-            // TODO: Handle full u28 range here.
-
             0x000_0000...0x3ff_ffff => decodeEarlyOp(op, trunc),
             0x400_0000...0x7ff_ffff => decodeSingleDataTransfer(op),
             0x800_0000...0x9ff_ffff => .{ .block_data_transfer = BlockDataTransfer.decode(op) },
-
             0xa00_0000...0xbff_ffff => .{ .branch_link = BranchLink.decode(op) },
-
-            else => @panic("Unknown ARM instruction"),
+            0xc00_0000...0xeff_ffff => @panic("coprocessor instructions not yet handled"),
+            0xf00_0000...0xfff_ffff => @panic("TODO: handle software interrupt"),
         };
     }
 
@@ -749,6 +769,12 @@ pub const Arm = union(enum) {
         if ((trunc & MultiplyLong.const_mask) == MultiplyLong.fixed_bits) {
             return .{
                 .mull = MultiplyLong.decode(op),
+            };
+        }
+
+        if ((trunc & Swap.const_mask) == Swap.fixed_bits) {
+            return .{
+                .swap = Swap.decode(op),
             };
         }
 
@@ -866,6 +892,18 @@ const op_bits = struct {
             }
         };
     }
+
+    /// Byte or Word bit,
+    /// used in SingleDataTransfer and Swap.
+    /// Bit 22 in both cases.
+    const ByteWord = enum(u1) {
+        word = 0,
+        byte = 1,
+
+        fn bits(self: @This()) u32 {
+            return @as(u32, @intFromEnum(self)) << 22;
+        }
+    };
 };
 
 test {

@@ -261,3 +261,23 @@ test "BlockDataTransfer encode/decode" {
     try ctest.expectEqualHex(code, op.encode());
     try testing.expectEqual(op, Arm.decode(code).block_data_transfer);
 }
+
+test "Swap encode/decode" {
+    const op: Arm.Swap = .{
+        .cond = .al,
+        .b = .byte,
+        .rn = 14,
+        .rd = 3,
+        .rm = 8,
+    };
+    const code: u32 =
+        Arm.Cond.al.bits() |
+        1 << 24 | // Fixed bit.
+        1 << 22 | // b=1.
+        14 << 16 | // rm=14.
+        3 << 12 | // rd=3.
+        9 << 4 | // Fixed bits.
+        8; // rm.
+    try ctest.expectEqualHex(code, op.encode());
+    try testing.expectEqual(op, Arm.decode(code).swap);
+}
