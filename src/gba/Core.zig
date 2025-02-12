@@ -28,32 +28,11 @@ cycle_count: u64,
 pub fn tick(self: *Core) void {
     // TODO: delegate to more components.
 
-    const pipeline_was_fetch_pending = switch (self.pipeline.fetch_state) {
-        .pending_half, .pending_word => true,
-        else => false,
-    };
-    const pc = self.registers.r15;
-    self.pipeline.tick(pc);
-    if (!pipeline_was_fetch_pending) {
-        // Did we switch from not pending to pending?
-        switch (self.pipeline.fetch_state) {
-            .pending_half => {
-                self.memory_manager.setPipelineOperation(.{
-                    .read_half = pc,
-                });
-            },
-            .pending_word => {
-                self.memory_manager.setPipelineOperation(.{
-                    .read_word = pc,
-                });
-            },
-
-            // Not pending before, not pending now.
-            else => {},
-        }
-    }
+    const pipeline_pending = self.handlePipelineFetch();
 
     if (self.memory_manager.tick()) |comp| {
+        // An operation completed,
+        // so apply it to the appropriate component.
         switch (comp) {
             .pipeline => self.handlePipelineMemoryCompletion(comp.pipeline),
             .cpu => self.handleCpuMemoryCompletion(comp.cpu),
@@ -61,8 +40,39 @@ pub fn tick(self: *Core) void {
     }
 
     self.cycle_count += 1;
+
+    // Apply outstanding operations to the memory manager.
+    if (pipeline_pending) |p| {
+        self.memory_manager.setPipelineOperation(p);
+    }
 }
 
+fn handlePipelineFetch(self: *Core) ?MemoryManager.PendingRo {
+    const was_fetch_pending = switch (self.pipeline.fetch_state) {
+        .pending_half, .pending_word => true,
+        else => false,
+    };
+    const pc = self.registers.r15;
+    self.pipeline.tick(pc);
+
+    // Already a pending fetch, so no new operation.
+    if (was_fetch_pending) {
+        return null;
+    }
+
+    // No pending fetch before;
+    // if there is a pending fetch now,
+    // then we will need to feed that into the memory manager shortly.
+    return switch (self.pipeline.fetch_state) {
+        .pending_half => .{ .read_half = pc },
+        .pending_word => .{ .read_word = pc },
+        else => null,
+    };
+}
+
+/// The memory manager indicated that pipeline completed an operation.
+/// The pipeline can only read halfwords and whole words,
+/// so update the actual pipeline.
 fn handlePipelineMemoryCompletion(self: *Core, comp: MemoryManager.PipelineCompletion) void {
     switch (comp) {
         .read_half => self.pipeline.completeFetchHalf(comp.read_half, &self.registers.r15),
@@ -77,5 +87,5 @@ fn handleCpuMemoryCompletion(self: *Core, comp: MemoryManager.CpuCompletion) voi
 }
 
 test {
-    _ = @import("./core_test.zig");
+    _ = @import("./Core_test.zig");
 }

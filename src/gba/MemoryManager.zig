@@ -60,25 +60,29 @@ pub fn tick(self: *MemoryManager) ?Completion {
     return null;
 }
 
+/// Indicate what exactly was completed when we did the final tick of a wait state.
 fn completeOperation(self: *MemoryManager) Completion {
     switch (self.active_operation) {
         // Must never be called when idle.
         .idle => unreachable,
 
         .pipeline => {
-            switch (self.pending_pipeline.?) {
+            const old = self.pending_pipeline.?;
+            self.pending_pipeline = null;
+            self.active_operation = .idle;
+            switch (old) {
                 // Pipeline can never read a byte.
                 .read_byte => unreachable,
 
                 .read_half => return .{
                     .pipeline = .{
-                        .read_half = self.readHalfImmediate(self.pending_pipeline.?.read_half, .pipeline),
+                        .read_half = self.readHalfImmediate(old.read_half, .pipeline),
                     },
                 },
 
                 .read_word => return .{
                     .pipeline = .{
-                        .read_word = self.readWordImmediate(self.pending_pipeline.?.read_word, .pipeline),
+                        .read_word = self.readWordImmediate(old.read_word, .pipeline),
                     },
                 },
             }

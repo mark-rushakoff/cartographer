@@ -67,4 +67,14 @@ test "initial tick sets memory manager state" {
         .read_word = 0,
     }, core.memory_manager.pending_pipeline);
     try testing.expectEqual(null, core.memory_manager.pending_cpu);
+
+    // Tick again and the pending pipeline operation completes.
+    core.tick();
+
+    // Which means the pipeline is fetching the next instruction,
+    // and decoding the first one.
+    try testing.expectEqual(arm.Pipeline.FetchState{ .pending_word = 4 }, core.pipeline.fetch_state);
+    try testing.expectEqual(arm.Pipeline.DecodingValue{ .arm = 0 }, core.pipeline.decoding_value);
+
+    // TODO: tick again to ready
 }
